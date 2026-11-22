@@ -17,9 +17,28 @@ pnpm start:services    # every service in one terminal; migrations run on start
 
 Check that everything is up: run `http/health.http`, or open `http://localhost:7201/health` and the other ports below.
 
+## Seed data
+
+Seed data is the demo riders and drivers you pick in the web app. You rarely need to create it by hand: on the first visit the web app does it when the databases are empty.
+
+| Way       | How                                                                                       | Creates                                                      |
+| --------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Automatic | open `http://localhost:5320` with empty databases                                         | riders `r001..r020`, drivers `d001..d050`                    |
+| Script    | `pnpm seed` (options: `--riders 20 --drivers 50`)                                         | the same, or as many as you ask for                          |
+| Lab tab   | buttons "Seed 20 riders" and "Seed 50 drivers"                                            | the same                                                     |
+| API       | `POST :7201/admin/seed` and `POST :7202/admin/seed` with `{ "count": 20, "prefix": "r" }` | `<prefix>001..`, any prefix of 1-10 lowercase letters or `_` |
+
+Things to know:
+
+- Seeding is idempotent: ids that exist are skipped, so running it twice adds nothing. The answer says how many were new and how many exist in total.
+- It creates profiles only (Postgres). Seeded drivers start offline: a driver appears on the map only after "Go online here" in the driver tab.
+- `pnpm simulate` seeds its own drivers `s001..s030` and puts them online; you need no other seed for it.
+- Other prefixes come from scripts and checks: `l`, `m` (rider load), `p` (location load), `h*` (request files), `z*` (scenario scripts). They show up in the dropdowns; any of them works.
+- To start from nothing: `pnpm reset:pods`, then `pnpm start:pods` and `pnpm start:services`. The next visit seeds again.
+
 ## Try it in the browser
 
-No seed step is needed: on the first visit the web app creates riders `r001..r020` and drivers `d001..d050` if the databases are empty.
+No seed step is needed: on the first visit the web app creates riders `r001..r020` and drivers `d001..d050` if the databases are empty (see [Seed data](#seed-data)).
 
 1. Open `http://localhost:5320` in two browser tabs.
 2. Tab 1, "I am a driver": `d001` is selected. Click the map where the driver should be (the big blue dot moves there), then press "Go online here". Status shows `available` and a small green dot appears on every map.

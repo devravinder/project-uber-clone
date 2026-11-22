@@ -128,6 +128,13 @@ Verified: the headless Chrome run passed 21 checks, including the checklists and
 
 Verified: a headless Chrome run with auto-drive off passed 22 checks: after "Arrived at pickup" driver-service has the driver exactly on the pickup, after "Complete trip" exactly on the dropoff, and the rider map shows the driver right after accept. The auto-drive run still passes (21 checks).
 
+## Task 11: closable notifications, seed data docs
+
+- [x] Each notification has a close button (x); "Clear all" appears when more than one is shown; errors stay 8 s, others 4 s
+- [x] `docs/HOW-TO-RUN.md` has a "Seed data" section: the four ways to seed, idempotency, offline drivers, test prefixes, starting clean
+
+Verified: headless Chrome, 6 checks: three notifications each have a close button, x closes one, "Clear all" removes the rest, a single notification shows no "Clear all" and still disappears after 4 s.
+
 ## Open items
 
 - [~] httpYac itself is not in the local pnpm store, so the `.http` files were run with a small local runner of the same syntax, not with httpYac.

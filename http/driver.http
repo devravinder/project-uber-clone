@@ -1,0 +1,251 @@
+@driver = http://localhost:7202
+
+{{
+  exports.trip = "ht" + Date.now().toString(36);
+}}
+
+### Reset switches (a lab run may have changed them)
+PUT {{driver}}/admin/switches/reset
+
+?? status == 200
+?? body heartbeatTtlSeconds == 30
+
+### Seed drivers hd001..hd005 (idempotent: a second run creates nothing)
+POST {{driver}}/admin/seed
+Content-Type: application/json
+
+{ "count": 5, "prefix": "hd" }
+
+?? status == 200
+?? body total >= 5
+
+### Update a profile
+PUT {{driver}}/drivers/hd001
+Content-Type: application/json
+X-User: hd001
+
+{ "name": "Asha", "vehicle": "Sedan" }
+
+?? status == 200
+?? body name == Asha
+
+### List profiles by cursor
+GET {{driver}}/drivers?limit=2
+
+?? status == 200
+?? js response.parsedBody.items.length == 2
+?? body nextCursor isString
+
+### Make sure hd001 and hd002 start offline (a second run finds them online)
+PUT {{driver}}/drivers/hd002/offline
+X-User: hd002
+
+?? status == 200
+?? body status == offline
+
+### Go online at a point in the city
+PUT {{driver}}/drivers/hd001/online
+Content-Type: application/json
+X-User: hd001
+
+{ "lat": 12.9716, "lng": 77.5946 }
+
+?? status == 200
+?? body status == available
+?? body alive == true
+
+### Going online twice is fine
+PUT {{driver}}/drivers/hd001/online
+Content-Type: application/json
+X-User: hd001
+
+{ "lat": 12.9716, "lng": 77.5946 }
+
+?? status == 200
+?? body status == available
+
+### Another caller cannot act as hd001: 403 NOT_YOUR_DRIVER
+PUT {{driver}}/drivers/hd001/online
+Content-Type: application/json
+X-User: hd002
+
+{ "lat": 12.9716, "lng": 77.5946 }
+
+?? status == 403
+?? body code == NOT_YOUR_DRIVER
+
+### A point outside the demo city is 400
+PUT {{driver}}/drivers/hd001/online
+Content-Type: application/json
+X-User: hd001
+
+{ "lat": 28.61, "lng": 77.2 }
+
+?? status == 400
+?? body code == INVALID_REQUEST
+
+### An unknown driver cannot go online: 404
+PUT {{driver}}/drivers/nobody_here/online
+Content-Type: application/json
+X-User: nobody_here
+
+{ "lat": 12.9716, "lng": 77.5946 }
+
+?? status == 404
+?? body code == DRIVER_NOT_FOUND
+
+### Location from an offline driver is 409 DRIVER_OFFLINE
+PUT {{driver}}/drivers/hd002/location
+Content-Type: application/json
+X-User: hd002
+
+{ "lat": 12.975, "lng": 77.5946 }
+
+?? status == 409
+?? body code == DRIVER_OFFLINE
+
+### hd002 goes online a little north, then sends a location
+PUT {{driver}}/drivers/hd002/online
+Content-Type: application/json
+X-User: hd002
+
+{ "lat": 12.98, "lng": 77.5946 }
+
+?? status == 200
+
+###
+PUT {{driver}}/drivers/hd002/location
+Content-Type: application/json
+X-User: hd002
+
+{ "lat": 12.975, "lng": 77.5946 }
+
+?? status == 200
+?? body status == available
+
+### Nearby available drivers, nearest first
+GET {{driver}}/drivers/nearby?lat=12.9716&lng=77.5946&radiusKm=1&limit=10
+
+?? status == 200
+?? js response.parsedBody.items.some((d) => d.driverId === "hd001")
+?? js response.parsedBody.items.every((d, i, a) => i === 0 || a[i - 1].distanceKm <= d.distanceKm)
+
+### Nearby with a bad latitude is 400
+GET {{driver}}/drivers/nearby?lat=abc&lng=77.5946
+
+?? status == 400
+?? body code == INVALID_REQUEST
+
+### Every online driver with status and position (for the map)
+GET {{driver}}/drivers/online
+
+?? status == 200
+?? js response.parsedBody.items.some((d) => d.driverId === "hd002" && d.status === "available")
+
+### Reserve hd001 for a trip
+POST {{driver}}/internal/drivers/hd001/reserve
+Content-Type: application/json
+
+{ "tripId": "{{trip}}", "ttlMs": 10000 }
+
+?? status == 200
+?? body reserved == true
+
+### A second reservation for another trip is refused
+POST {{driver}}/internal/drivers/hd001/reserve
+Content-Type: application/json
+
+{ "tripId": "{{trip}}-other", "ttlMs": 10000 }
+
+?? status == 200
+?? body reserved == false
+
+### A reserved driver is no longer nearby
+GET {{driver}}/drivers/nearby?lat=12.9716&lng=77.5946&radiusKm=1
+
+?? status == 200
+?? js !response.parsedBody.items.some((d) => d.driverId === "hd001")
+
+### A driver holding an offer cannot go offline: 409 DRIVER_BUSY
+PUT {{driver}}/drivers/hd001/offline
+X-User: hd001
+
+?? status == 409
+?? body code == DRIVER_BUSY
+?? body status == offered
+
+### Assign the trip (accepting the offer)
+POST {{driver}}/internal/drivers/hd001/assign
+Content-Type: application/json
+
+{ "tripId": "{{trip}}" }
+
+?? status == 200
+?? body assigned == true
+
+### Assigning again is still a success
+POST {{driver}}/internal/drivers/hd001/assign
+Content-Type: application/json
+
+{ "tripId": "{{trip}}" }
+
+?? status == 200
+?? body assigned == true
+
+### The driver is on the trip
+GET {{driver}}/drivers/hd001
+
+?? status == 200
+?? body state.status == on_trip
+?? body state.tripId == {{trip}}
+
+### Releasing with another trip id does nothing
+POST {{driver}}/internal/drivers/hd001/release
+Content-Type: application/json
+
+{ "tripId": "{{trip}}-other" }
+
+?? status == 200
+?? body released == false
+
+### Release when the trip ends
+POST {{driver}}/internal/drivers/hd001/release
+Content-Type: application/json
+
+{ "tripId": "{{trip}}" }
+
+?? status == 200
+?? body released == true
+
+### A repeated release is a no-op
+POST {{driver}}/internal/drivers/hd001/release
+Content-Type: application/json
+
+{ "tripId": "{{trip}}" }
+
+?? status == 200
+?? body released == false
+
+### Reserve with a bad ttl is 400
+POST {{driver}}/internal/drivers/hd001/reserve
+Content-Type: application/json
+
+{ "tripId": "x", "ttlMs": 5 }
+
+?? status == 400
+?? body code == INVALID_REQUEST
+
+### Go offline
+PUT {{driver}}/drivers/hd001/offline
+X-User: hd001
+
+?? status == 200
+?? body status == offline
+
+### Counters: online drivers, location writes, sweeper, trip events
+GET {{driver}}/admin/stats
+
+?? status == 200
+?? body online >= 1
+?? body locationWrites.total >= 1
+?? body sweeper.runs >= 1

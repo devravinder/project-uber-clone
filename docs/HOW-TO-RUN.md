@@ -39,6 +39,10 @@ pnpm start:matching:2  # second matching instance on 7213
 pnpm start:gateway:2   # second gateway instance on 7216
 ```
 
+## Request files
+
+`http/*.http` are httpYac files, one per service. Run them with the httpYac CLI or the VS Code extension `anweber.vscode-httpyac`. Each file resets its switches first and can run twice in a row.
+
 ## Stop and reset
 
 ```bash

@@ -7,7 +7,7 @@ One commit per task, made once its checks pass. `[x]` done and verified, `[~]` p
 | 1   | Scaffold: workspace, kit, contracts, infra, six services with `/health` | done    |
 | 2   | driver-service: locations in Redis GEO, nearby search, reservations     | done    |
 | 3   | pricing-service: quotes and surge per geohash cell                      | done    |
-| 4   | trip-service and rider-service: trip state machine, outbox, ride API    | planned |
+| 4   | trip-service and rider-service: trip state machine, outbox, ride API    | done    |
 | 5   | matching-service: offers with timeouts, no double assignment            | planned |
 | 6   | location-gateway: live location and trip updates over WebSocket         | planned |
 | 7   | Web app: rider, driver and lab screens on a city map                    | planned |
@@ -32,7 +32,7 @@ Verified: `pnpm install --offline`, `pnpm start:pods`, all eight instances answe
 - [x] Internal reserve, assign and release, each checked against the trip id that holds the driver
 - [x] Sweeper: expired heartbeat → offline, offer past `offerUntil` → available
 - [x] Location updates publish to `ub:loc:<driverId>`
-- [~] Trip-event consumer (release on `TripCompleted`, `TripCancelled`, `TripNoDrivers`) is wired; it is checked end to end in Task 4, when trip-service produces events
+- [x] Trip-event consumer releases the driver on `TripCompleted`, `TripCancelled`, `TripNoDrivers` (verified in Task 4)
 
 Verified: `http/driver.http` passes twice (29 requests). A scenario script checked the rest: 20 parallel reservations of one driver give exactly one winner; a 1 s offer is freed by the sweeper in about 3 s; a silent driver with a 5 s heartbeat goes offline after about 6 s; `redis-cli SUBSCRIBE ub:loc:<id>` receives the location JSON; with Redis stopped a location update answers 503 `REDIS_UNAVAILABLE` in 9 ms and `/health` answers 503.
 
@@ -45,3 +45,19 @@ Verified: `http/driver.http` passes twice (29 requests). A scenario script check
 - [x] `GET /surge`, `GET /surge/cells`, switches `surgeEnabled`, `forceSurge`, `surgeWindowMinutes`, `surgeMax`, `quoteTtlSeconds`, `supplyRadiusKm`
 
 Verified: `http/pricing.http` passes twice (16 requests). A scenario script sent 7 `TripRequested` events through Kafka (one duplicate): demand rose by exactly 6, and with 2 drivers nearby the surge was 3.0 (capped). With driver-service stopped a quote answered 201 in 8 ms with surge 1.0. A 10 s quote answered 404 after 11 s. `geohashEncode(57.64911, 10.40744, 11)` gives the reference value `u4pruydqqvj`.
+
+## Task 4: trip-service and rider-service
+
+- [x] Trips in Postgres with a status enum, a version column and partial unique indexes (one active trip per rider and per driver)
+- [x] `POST /trips` from a quote: 201 new, 200 for the same quote again; 409 `ACTIVE_TRIP_EXISTS`, `QUOTE_USED`; 403 `QUOTE_NOT_YOURS`; 410 `QUOTE_EXPIRED`
+- [x] State machine: assign, arrive, start, complete, cancel (rider or driver), no-drivers; actor checks; optimistic version with re-read
+- [x] Outbox to `ub.trip-events`, one event per transition with the whole trip
+- [x] Reaper: trips still requested after `requestTimeoutSeconds` become `no_drivers`
+- [x] History and active-trip queries for riders and drivers, cursor pagination
+- [x] rider-service: rider profiles and seed, `/rides/estimate`, `/rides`, `/rides/current`, `/rides/:id/cancel`, history; one retry of "request ride" on no answer
+- [x] Kit: `callJsonWithStatus` and `relayUpstream` (pass a 4xx through with its code and fields)
+- [x] Skills `trip-state-machine` and `pricing-surge` (the pricing skill was missed in Task 3)
+
+Verified: `http/trip.http` (39) and `http/rider.http` (16) pass, and all five request files pass twice in a row (109 requests). A scenario script checked the rest (36 checks): `TripCompleted` and `TripCancelled` reach driver-service through the outbox and Kafka and free the driver; 10 parallel assigns of one trip give exactly one 200; 10 parallel requests with one quote give one trip; a paused relay keeps rows pending and drains in about 250 ms when resumed; with a 3 s timeout the reaper ends an unmatched trip; with trip-service stopped "request ride" answers 503 `TRIPS_UNAVAILABLE` after one retry, and the same quote works once it is back. With `transitionDelayMs = 300` a 10-way race showed 8 version conflicts and one write.
+
+Gotcha: right after driver-service restarts, its consumer group needs about 30 s to rejoin, so the first trip-end event can take that long to free a driver.

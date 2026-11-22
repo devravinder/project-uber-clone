@@ -1,0 +1,360 @@
+@trip = http://localhost:7204
+@pricing = http://localhost:7205
+
+{{
+  const run = Date.now().toString(36);
+  exports.rider = "hr" + run;
+  exports.rider2 = "hs" + run;
+  exports.driver = "hd" + run;
+  exports.driver2 = "he" + run;
+}}
+
+### Reset switches (a lab run may have changed them)
+PUT {{trip}}/admin/switches/reset
+
+?? status == 200
+?? body outboxPaused == false
+?? body requestTimeoutSeconds == 180
+
+### A quote for this run's rider (trip-service charges the quoted fare)
+# @name quote
+POST {{pricing}}/quotes
+Content-Type: application/json
+X-User: {{rider}}
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 13.01, "lng": 77.62 }
+}
+
+?? status == 201
+
+### Create a trip from the quote: 201, status requested
+# @name created
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider}}
+
+{ "quoteId": "{{quote.id}}" }
+
+?? status == 201
+?? body status == requested
+?? body riderId == {{rider}}
+?? body fareMinor == {{quote.fareMinor}}
+?? body version == 0
+?? body driverId == null
+
+### The same quote again returns the same trip with 200 (idempotent)
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider}}
+
+{ "quoteId": "{{quote.id}}" }
+
+?? status == 200
+?? body id == {{created.id}}
+
+### Another rider cannot use that quote: 409 QUOTE_USED
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider2}}
+
+{ "quoteId": "{{quote.id}}" }
+
+?? status == 409
+?? body code == QUOTE_USED
+
+### A second quote for the same rider
+# @name quote2
+POST {{pricing}}/quotes
+Content-Type: application/json
+X-User: {{rider}}
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 12.99, "lng": 77.61 }
+}
+
+?? status == 201
+
+### One active trip per rider: 409 ACTIVE_TRIP_EXISTS with the active trip id
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider}}
+
+{ "quoteId": "{{quote2.id}}" }
+
+?? status == 409
+?? body code == ACTIVE_TRIP_EXISTS
+?? body activeTripId == {{created.id}}
+
+### Someone else's quote: 403 QUOTE_NOT_YOURS
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider2}}
+
+{ "quoteId": "{{quote2.id}}" }
+
+?? status == 403
+?? body code == QUOTE_NOT_YOURS
+
+### An expired or unknown quote: 410 QUOTE_EXPIRED
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider2}}
+
+{ "quoteId": "qdoesnotexist" }
+
+?? status == 410
+?? body code == QUOTE_EXPIRED
+
+### A missing quote id is 400
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider2}}
+
+{}
+
+?? status == 400
+?? body code == INVALID_REQUEST
+
+### Read the trip
+GET {{trip}}/trips/{{created.id}}
+
+?? status == 200
+?? body status == requested
+
+### Unknown trip is 404
+GET {{trip}}/trips/tdoesnotexist
+
+?? status == 404
+?? body code == TRIP_NOT_FOUND
+
+### The rider's active trip
+GET {{trip}}/riders/{{rider}}/active-trip
+
+?? status == 200
+?? body trip.id == {{created.id}}
+
+### No active trip is a 200 with null
+GET {{trip}}/riders/{{rider2}}/active-trip
+
+?? status == 200
+?? body trip == null
+
+### A driver cannot arrive before being assigned: 403 NOT_YOUR_TRIP
+POST {{trip}}/trips/{{created.id}}/arrive
+X-User: {{driver}}
+
+?? status == 403
+?? body code == NOT_YOUR_TRIP
+
+### matching-service assigns a driver: matched, version 1
+POST {{trip}}/internal/trips/{{created.id}}/assign
+Content-Type: application/json
+
+{ "driverId": "{{driver}}" }
+
+?? status == 200
+?? body status == matched
+?? body driverId == {{driver}}
+?? body version == 1
+
+### Assigning the same driver again changes nothing
+POST {{trip}}/internal/trips/{{created.id}}/assign
+Content-Type: application/json
+
+{ "driverId": "{{driver}}" }
+
+?? status == 200
+?? body version == 1
+
+### Another driver is refused: 409 TRIP_ALREADY_MATCHED
+POST {{trip}}/internal/trips/{{created.id}}/assign
+Content-Type: application/json
+
+{ "driverId": "{{driver2}}" }
+
+?? status == 409
+?? body code == TRIP_ALREADY_MATCHED
+
+### Start before arriving: 409 INVALID_TRANSITION
+POST {{trip}}/trips/{{created.id}}/start
+X-User: {{driver}}
+
+?? status == 409
+?? body code == INVALID_TRANSITION
+?? body status == matched
+
+### Another driver cannot move the trip: 403
+POST {{trip}}/trips/{{created.id}}/arrive
+X-User: {{driver2}}
+
+?? status == 403
+?? body code == NOT_YOUR_TRIP
+
+### Driver arrives at the pickup
+POST {{trip}}/trips/{{created.id}}/arrive
+X-User: {{driver}}
+
+?? status == 200
+?? body status == arrived
+?? body arrivedAt isString
+
+### Trip starts
+POST {{trip}}/trips/{{created.id}}/start
+X-User: {{driver}}
+
+?? status == 200
+?? body status == in_progress
+
+### A trip in progress cannot be cancelled: 409
+POST {{trip}}/trips/{{created.id}}/cancel
+Content-Type: application/json
+X-User: {{rider}}
+
+{}
+
+?? status == 409
+?? body code == INVALID_TRANSITION
+
+### Trip completes: version 4
+POST {{trip}}/trips/{{created.id}}/complete
+X-User: {{driver}}
+
+?? status == 200
+?? body status == completed
+?? body version == 4
+?? body endedAt isString
+
+### Completing again changes nothing
+POST {{trip}}/trips/{{created.id}}/complete
+X-User: {{driver}}
+
+?? status == 200
+?? body version == 4
+
+### The first quote is still bound to the completed trip; quote2 now works
+# @name second
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider}}
+
+{ "quoteId": "{{quote2.id}}" }
+
+?? status == 201
+?? body status == requested
+
+### Assign driver to the second trip
+POST {{trip}}/internal/trips/{{second.id}}/assign
+Content-Type: application/json
+
+{ "driverId": "{{driver}}" }
+
+?? status == 200
+?? body status == matched
+
+### A quote for rider2
+# @name quote3
+POST {{pricing}}/quotes
+Content-Type: application/json
+X-User: {{rider2}}
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 13.01, "lng": 77.62 }
+}
+
+?? status == 201
+
+###
+# @name third
+POST {{trip}}/trips
+Content-Type: application/json
+X-User: {{rider2}}
+
+{ "quoteId": "{{quote3.id}}" }
+
+?? status == 201
+
+### One active trip per driver (partial unique index): 409 DRIVER_BUSY
+POST {{trip}}/internal/trips/{{third.id}}/assign
+Content-Type: application/json
+
+{ "driverId": "{{driver}}" }
+
+?? status == 409
+?? body code == DRIVER_BUSY
+
+### The driver cancels the second trip
+POST {{trip}}/trips/{{second.id}}/cancel
+Content-Type: application/json
+X-User: {{driver}}
+
+{ "reason": "flat tyre" }
+
+?? status == 200
+?? body status == cancelled
+?? body cancelledBy == driver
+?? body cancelReason == flat tyre
+
+### Cancelling again is a 200 with no change
+POST {{trip}}/trips/{{second.id}}/cancel
+Content-Type: application/json
+X-User: {{rider}}
+
+{}
+
+?? status == 200
+?? body cancelledBy == driver
+
+### matching-service gives up on the third trip: no_drivers
+POST {{trip}}/internal/trips/{{third.id}}/no-drivers
+
+?? status == 200
+?? body status == no_drivers
+?? body cancelledBy == system
+
+### A stranger cannot cancel: 403
+POST {{trip}}/trips/{{third.id}}/cancel
+Content-Type: application/json
+X-User: someone_else
+
+{}
+
+?? status == 403
+?? body code == NOT_YOUR_TRIP
+
+### Rider history, newest first, by cursor
+# @name page1
+GET {{trip}}/riders/{{rider}}/trips?limit=1
+
+?? status == 200
+?? body items.0.id == {{second.id}}
+?? body nextCursor == {{second.id}}
+
+###
+GET {{trip}}/riders/{{rider}}/trips?limit=1&before={{page1.nextCursor}}
+
+?? status == 200
+?? body items.0.id == {{created.id}}
+
+### Driver history
+GET {{trip}}/drivers/{{driver}}/trips
+
+?? status == 200
+?? js response.parsedBody.items.length == 2
+
+### Every change wrote an outbox row; the relay has sent them
+# @sleep 1000
+GET {{trip}}/admin/outbox
+
+?? status == 200
+?? body pending == 0
+?? body sent >= 9
+
+### Counters
+GET {{trip}}/admin/stats
+
+?? status == 200
+?? body created >= 3

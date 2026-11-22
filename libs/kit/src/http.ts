@@ -1,4 +1,5 @@
 import { USER_HEADER } from "@apps/contracts";
+import { fail } from "./util.js";
 
 export type CallOptions = {
   method?: string;
@@ -13,9 +14,10 @@ export class UpstreamError extends Error {
     readonly service: string,
     readonly status: number | null,
     readonly code: string,
-    message: string,
+    readonly detail: string,
+    readonly extra: Record<string, unknown> = {},
   ) {
-    super(message);
+    super(`${service} ${code}: ${detail}`);
   }
 
   get unreachable(): boolean {
@@ -23,11 +25,11 @@ export class UpstreamError extends Error {
   }
 }
 
-export async function callJson<T>(
+export async function callJsonWithStatus<T>(
   service: string,
   url: string,
   options: CallOptions = {},
-): Promise<T> {
+): Promise<{ status: number; body: T }> {
   const { method = "GET", body, user, timeoutMs = 2000 } = options;
   let response: Response;
   try {
@@ -38,9 +40,8 @@ export async function callJson<T>(
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
-    const cause =
-      (error as Error & { cause?: { code?: string } }).cause?.code ?? (error as Error).name;
-    throw new UpstreamError(service, null, "UNREACHABLE", `${service} unreachable: ${cause}`);
+    const e = error as Error & { cause?: { code?: string } };
+    throw new UpstreamError(service, null, "UNREACHABLE", e.cause?.code ?? e.name);
   }
   const text = await response.text();
   let parsed: unknown = null;
@@ -50,13 +51,30 @@ export async function callJson<T>(
     parsed = text;
   }
   if (!response.ok) {
-    const record = (parsed ?? {}) as { code?: unknown; message?: unknown };
-    const code = typeof record.code === "string" ? record.code : `HTTP_${response.status}`;
-    const message = typeof record.message === "string" ? record.message : text.slice(0, 200);
-    throw new UpstreamError(service, response.status, code, `${service} ${code}: ${message}`);
+    const record = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+    const { statusCode: _status, code: rawCode, message: rawMessage, ...extra } = record;
+    const code = typeof rawCode === "string" ? rawCode : `HTTP_${response.status}`;
+    const message = typeof rawMessage === "string" ? rawMessage : text.slice(0, 200);
+    throw new UpstreamError(service, response.status, code, message, extra);
   }
-  return parsed as T;
+  return { status: response.status, body: parsed as T };
+}
+
+export async function callJson<T>(
+  service: string,
+  url: string,
+  options: CallOptions = {},
+): Promise<T> {
+  return (await callJsonWithStatus<T>(service, url, options)).body;
 }
 
 export const isUnreachable = (error: unknown): boolean =>
   error instanceof UpstreamError && error.unreachable;
+
+// 4xx answers keep status, code and fields; no answer or a 5xx becomes 503.
+export function relayUpstream(error: unknown, unavailableCode: string): never {
+  if (error instanceof UpstreamError && !error.unreachable) {
+    fail(error.status!, error.code, error.detail, error.extra);
+  }
+  return fail(503, unavailableCode, error instanceof Error ? error.message : String(error));
+}

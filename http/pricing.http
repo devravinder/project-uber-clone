@@ -7,6 +7,15 @@ PUT {{pricing}}/admin/switches/reset
 ?? body surgeEnabled == true
 ?? body forceSurge == 0
 
+### Turn real surge off, so the fare checks do not depend on recent demand
+PUT {{pricing}}/admin/switches
+Content-Type: application/json
+
+{ "surgeEnabled": false }
+
+?? status == 200
+?? body surgeEnabled == false
+
 ### Quote a 5.1 km trip: 5000 + 1200 x 5.1 + 200 x 12.8 = 13680, rounded to 13700
 # @name quote
 POST {{pricing}}/quotes
@@ -20,6 +29,7 @@ X-User: asha
 
 ?? status == 201
 ?? body riderId == asha
+?? body surge == 1
 ?? body distanceKm == 5.1
 ?? body durationMin == 12.8
 ?? body fareMinor == 13700

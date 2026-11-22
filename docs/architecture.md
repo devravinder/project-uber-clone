@@ -91,3 +91,50 @@ sequenceDiagram
 | `prc:seen:<eventId>`         | Dedupe marker for consumed events, TTL 24 h  |
 
 Fare in minor units: `max(8000, 5000 + 1200 x km + 200 x min) x surge`, rounded to whole currency units. Surge = `1 + (demand / supply - 1) x 0.5`, from 1.0 to 3.0; supply unknown means 1.0.
+
+## trip-service
+
+```mermaid
+stateDiagram-v2
+  [*] --> requested: POST /trips (quote)
+  requested --> matched: assign (matching)
+  requested --> no_drivers: no-drivers (matching or reaper)
+  requested --> cancelled: cancel (rider)
+  matched --> arrived: arrive (driver)
+  matched --> cancelled: cancel (rider or driver)
+  arrived --> in_progress: start (driver)
+  arrived --> cancelled: cancel (rider or driver)
+  in_progress --> completed: complete (driver)
+  completed --> [*]
+  cancelled --> [*]
+  no_drivers --> [*]
+```
+
+Every arrow is `UPDATE ... WHERE id AND version` plus an outbox row in one transaction (ADR-013). The event names are `TripRequested`, `TripMatched`, `DriverArrived`, `TripStarted`, `TripCompleted`, `TripCancelled` and `TripNoDrivers`, keyed by trip id on `ub.trip-events`.
+
+```mermaid
+sequenceDiagram
+  participant W as web app
+  participant R as rider-service
+  participant P as pricing-service
+  participant T as trip-service
+  participant K as ub.trip-events
+  W->>R: POST /rides/estimate
+  R->>P: POST /quotes
+  P-->>R: quote (fare locked 120 s)
+  R-->>W: quote
+  W->>R: POST /rides (quoteId)
+  R->>T: POST /trips (retried once if no answer)
+  T->>P: GET /quotes/:id
+  T->>T: one TX: trip row + outbox row
+  T-->>R: 201 trip requested (200 if the quote was used before)
+  R-->>W: trip
+  T->>K: TripRequested (outbox relay)
+```
+
+| Index                         | Guards                                             |
+| ----------------------------- | -------------------------------------------------- |
+| `trips_quote_id_key`          | One trip per quote (idempotent request, ADR-012)   |
+| `trips_one_active_per_rider`  | A rider has at most one requested or ongoing trip  |
+| `trips_one_active_per_driver` | A driver is on at most one matched or ongoing trip |
+| `outbox_pending_idx`          | The relay scans only unsent rows                   |

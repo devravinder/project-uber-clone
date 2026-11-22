@@ -74,3 +74,39 @@
 - Decision: the supply call has an 800 ms budget. On a timeout, error or 5xx the quote still answers 201 with `supply: null` and surge 1.0, and `supplyFallbacks` counts it.
 - Rejected: failing the quote (riders cannot book while driver-service is down) or caching the last supply forever (stale prices after an outage).
 - Verified: with driver-service stopped a quote answers 201 in 8 ms with surge 1.0.
+
+## ADR-012: The quote id is the idempotency key for "request ride"
+
+- Context: a rider's app retries when the answer is lost. Two trips from one tap would mean two drivers driving to one rider.
+- Decision: `trips.quote_id` is unique. `POST /trips` with a quote that already has a trip returns that trip with 200 (201 only for a new trip). A quote used by another rider answers 409 `QUOTE_USED`.
+- Rejected: an `Idempotency-Key` header and a keys table (as in the twitter clone). The quote is already a single-use token the client holds, so a second key adds nothing.
+- Verified: 10 parallel requests with one quote create one trip (one 201, nine 200 with the same id).
+
+## ADR-013: Trip state machine with optimistic locking
+
+- Decision: the allowed transitions are a table (`RULES` in `state-machine.ts`) plus actor rules (`forbidden`). Each change is `UPDATE trips ... WHERE id = $1 AND version = $2` with `version + 1`, and the outbox row is written in the same transaction. A lost race re-reads the trip and decides again, at most 3 times.
+- A repeated call that finds the trip already in the target state answers 200 with no change (complete twice, cancel twice, assign the same driver twice). A call from a state the rule does not allow answers 409 `INVALID_TRANSITION` with the current `status`.
+- Rejected: `SELECT ... FOR UPDATE` for every change. It holds a row lock across the read and the decision, and the conflicts are rare (a rider cancelling while a driver accepts).
+- Verified: with the lab switch `transitionDelayMs = 300`, a 10-way assign race gave one 200 and nine 409 `TRIP_ALREADY_MATCHED`; 8 of the 9 losers hit the version check and re-read; the trip was written once (version 1).
+
+## ADR-014: Partial unique indexes guard one active trip per rider and per driver
+
+- Decision: `trips_one_active_per_rider` on `rider_id` where the status is requested, matched, arrived or in_progress, and `trips_one_active_per_driver` on `driver_id` where it is matched, arrived or in_progress. The code checks first for a friendly error; the index is the guard that holds under any race.
+- Rejected: only an application check. Two requests can both pass the check before either inserts.
+- Consequences: a violation surfaces as Prisma `P2002`; trip-service maps it to 409 `ACTIVE_TRIP_EXISTS` (with `activeTripId`) or `DRIVER_BUSY`.
+
+## ADR-015: trip-service ends trips nobody matched
+
+- Decision: a reaper in trip-service turns trips still `requested` after `requestTimeoutSeconds` (180) into `no_drivers`, using the same versioned transition.
+- Rejected: relying only on matching-service's own timeout. If matching-service is down or lost its job, riders would wait forever. The owner of the state owns its timeouts.
+
+## ADR-016: rider-service is the rider-facing API
+
+- Decision: the web app calls rider-service (`/rides/estimate`, `/rides`, `/rides/current`, `/rides/:id/cancel`), which checks the rider exists and calls pricing-service and trip-service with timeouts. 4xx answers pass through with their status, `code` and extra fields; no answer or a 5xx becomes 503 `PRICING_UNAVAILABLE` or `TRIPS_UNAVAILABLE`.
+- "Request ride" is retried once when trip-service gave no answer at all. That is safe only because of ADR-012; nothing else is retried.
+- Rejected: the web app calling trip-service directly. Every client would need to know the quote and trip rules.
+
+## ADR-017: A driver cancel ends the trip
+
+- Decision: a driver may cancel a matched or arrived trip; it becomes `cancelled` with `cancelledBy: driver`, and the rider requests again.
+- Rejected: putting the trip back to `requested` for re-matching. Real apps do this, but it needs a "matched → requested" edge and a second matching job per trip; the learning value is in matching itself (Task 5).

@@ -1,6 +1,13 @@
 export { bootstrap } from "./bootstrap.js";
 export { type BaseConfig, baseEnvSchema, brokersOf, loadConfig, SERVICE_CONFIG } from "./config.js";
-export { type CallOptions, callJson, isUnreachable, UpstreamError } from "./http.js";
+export {
+  type CallOptions,
+  callJson,
+  callJsonWithStatus,
+  isUnreachable,
+  relayUpstream,
+  UpstreamError,
+} from "./http.js";
 export { idTime, newId } from "./ids.js";
 export {
   type ConsumedMessage,

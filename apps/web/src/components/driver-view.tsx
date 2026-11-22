@@ -304,9 +304,21 @@ export function DriverView() {
               <button
                 className="btn"
                 onClick={() =>
-                  void run(() => api.tripStep(driver, trip.id, next.step)).then(
-                    (t) => t && setTrip(t.status === "completed" ? null : t),
-                  )
+                  void run(async () => {
+                    // Arriving puts the driver on the pickup, completing on the dropoff.
+                    const spot =
+                      next.step === "arrive"
+                        ? trip.pickup
+                        : next.step === "complete"
+                          ? trip.dropoff
+                          : null;
+                    if (spot) {
+                      setPos(spot);
+                      posRef.current = spot;
+                      await api.location(driver, spot);
+                    }
+                    return api.tripStep(driver, trip.id, next.step);
+                  }).then((t) => t && setTrip(t.status === "completed" ? null : t))
                 }
               >
                 {next.label}

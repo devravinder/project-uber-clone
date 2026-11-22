@@ -25,7 +25,7 @@ No seed step is needed: on the first visit the web app creates riders `r001..r02
 2. Tab 1, "I am a driver": `d001` is selected. Click the map where the driver should be (the big blue dot moves there), then press "Go online here". Status shows `available` and a small green dot appears on every map.
 3. Tab 2, "I am a rider": `r001` is selected. Click the map near the driver for the pickup (P), click again for the dropoff (D). The panel lists the free drivers your request will be offered to, nearest first.
 4. Press "Get estimate", then "Request ride". The trip card shows who is being asked and how many seconds they have.
-5. Tab 1 shows the offer with a 10 s countdown. Press "Accept". With auto-drive on, the driver drives to the pickup; press "Arrived at pickup", "Start trip", and at the dropoff "Complete trip".
+5. Tab 1 shows the offer with a 10 s countdown. Press "Accept", then "Arrived at pickup", "Start trip" and "Complete trip". "Arrived at pickup" puts the driver on P and "Complete trip" puts them on D, so you can press them right away. With auto-drive on, the driver also drives there by itself, 100 m a second, if you wait.
 
 Tab 2 shows every step and the driver moving. Each tab has a "How to..." checklist that marks what is done and says what to do next.
 

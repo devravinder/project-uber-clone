@@ -121,6 +121,13 @@ Verified: `load:locations` with 200 drivers and 50 in flight: about 11,000 write
 
 Verified: the headless Chrome run passed 21 checks, including the checklists and legend, `d001` listed as the first driver to be asked, and "Asking d001" on the rider page about 0.8 s after the request. `http/matching.http` passes twice (28 requests). The auto-seed path was not run against an empty database (the local one already had data); it calls the same idempotent seed endpoints as `pnpm seed`.
 
+## Task 10: trip buttons move the driver
+
+- [x] "Arrived at pickup" sends the pickup as the driver's location, then arrives; "Complete trip" does the same with the dropoff
+- [x] The rider map shows the driver as soon as the trip is matched (reads the driver's last position once), instead of after the next location push
+
+Verified: a headless Chrome run with auto-drive off passed 22 checks: after "Arrived at pickup" driver-service has the driver exactly on the pickup, after "Complete trip" exactly on the dropoff, and the rider map shows the driver right after accept. The auto-drive run still passes (21 checks).
+
 ## Open items
 
 - [~] httpYac itself is not in the local pnpm store, so the `.http` files were run with a small local runner of the same syntax, not with httpYac.

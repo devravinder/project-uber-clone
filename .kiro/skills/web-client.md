@@ -31,6 +31,8 @@ description: Structure and rules of apps/web (React + Vite + Tailwind, SVG city 
 - Each view starts with a `Guide` checklist; when you add a step to a flow, add it there too.
 - `app.tsx` seeds demo riders and drivers when the lists are empty; keep the seed endpoints idempotent.
 
+- Trip step buttons move the driver: arrive sends the pickup as the location first, complete sends the dropoff.
+
 ## Learned
 
 - React StrictMode opens a second socket briefly in development; announce each offer once (keyed by trip id).

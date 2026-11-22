@@ -78,6 +78,19 @@ export function RiderView() {
   };
 
   const live = trip && ["matched", "arrived", "in_progress"].includes(trip.status);
+
+  // The first pushed location can be seconds away; show where the driver is now.
+  useEffect(() => {
+    if (!live || driverAt || !trip?.driverId) return;
+    void api.driver(trip.driverId).then(
+      (d) => {
+        if (d.state.lat !== null && d.state.lng !== null) {
+          setDriverAt((current) => current ?? { lat: d.state.lat!, lng: d.state.lng! });
+        }
+      },
+      () => undefined,
+    );
+  }, [live, driverAt, trip?.driverId]);
   const etaMin =
     live && driverAt && trip.status === "matched"
       ? Math.max(1, Math.round((haversineKm(driverAt, trip.pickup) / FARE.avgSpeedKmh) * 60))

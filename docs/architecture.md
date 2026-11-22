@@ -141,7 +141,33 @@ sequenceDiagram
 | `prc:cells`                  | Sorted set: cell by last request time        |
 | `prc:seen:<eventId>`         | Dedupe marker for consumed events, TTL 24 h  |
 
-Fare in minor units: `max(8000, 5000 + 1200 x km + 200 x min) x surge`, rounded to whole currency units. Surge = `1 + (demand / supply - 1) x 0.5`, from 1.0 to 3.0; supply unknown means 1.0.
+Fare in minor units: `max(8000, 5000 + 1200 x km + 200 x min) x surge`, rounded to whole currency units. Surge = `1 + (demand / supply - 1) x 0.5`, from 1.0 to 3.0; supply unknown means 1.0. The full explanation with examples is in [How the price is calculated](#how-the-price-is-calculated).
+
+## How the price is calculated
+
+pricing-service works out every estimate in four steps (code: `apps/pricing-service/src/pricing/fare.ts`, settings: `FARE` in `libs/contracts/src/constants.ts`). All money is in minor units: 100 minor = INR 1.00.
+
+1. Distance and time. Distance is the straight line between pickup and dropoff (haversine), rounded to 0.1 km. Time assumes 24 km/h: `minutes = km / 24 x 60`, rounded to 0.1 min. There is no road routing (ADR-003).
+2. Base fare. `5000 + 1200 x km + 200 x minutes` (INR 50 to start, INR 12 per km, INR 2 per minute), and never less than the minimum of 8000 (INR 80).
+3. Surge. The city is cut into geohash cells of about 4.9 x 4.9 km. For the cell that holds the pickup:
+   - demand = ride requests whose pickup was in that cell during the last 5 minutes (counted from `TripRequested` events; estimates do not count)
+   - supply = free drivers within 3 km of the pickup right now (drivers offered a trip or on a trip are not free); zero is treated as 1
+   - `surge = 1 + (demand / supply - 1) x 0.5`, rounded to 0.1, never below 1.0 and never above 3.0
+   - if driver-service does not answer within 800 ms, supply is unknown and surge is 1.0 (ADR-011)
+4. Final fare. `base x surge`, rounded to whole rupees. The rider pays exactly this: the quote is held for 120 s, and trip-service charges the quote, not a new price (ADR-010).
+
+Worked examples:
+
+| Trip                         | Distance, time   | Base fare                               | Demand / supply | Surge                              | Fare       |
+| ---------------------------- | ---------------- | --------------------------------------- | --------------- | ---------------------------------- | ---------- |
+| A typical ride               | 3.1 km, 7.8 min  | 5000 + 3720 + 1560 = 10280              | 1 / 0 (as 1)    | 1 + (1 - 1) x 0.5 = 1.0            | INR 103.00 |
+| The same ride in a busy cell | 3.1 km, 7.8 min  | 10280                                   | 8 / 0 (as 1)    | 1 + (8 - 1) x 0.5 = 4.5, cap 3.0   | INR 308.00 |
+| A little busy                | 5.1 km, 12.8 min | 5000 + 6120 + 2560 = 13680              | 3 / 2           | 1 + (1.5 - 1) x 0.5 = 1.25, so 1.3 | INR 178.00 |
+| A very short ride            | 0.5 km, 1.3 min  | 5000 + 600 + 260 = 5860, raised to 8000 | 0 / 4           | 1.0                                | INR 80.00  |
+
+The orange boxes on the map are these cells. A box appears when its cell has had at least one request in the last 5 minutes, and fades out 5 minutes after the last one. Its label `x3.0 (8/0)` means surge 3.0, 8 requests, 0 free drivers. For the map, supply is counted around the centre of the box; for a real estimate it is counted around your pickup, so the two can differ a little.
+
+Lab switches on pricing-service change the rules while you watch: `surgeEnabled` (off means always 1.0), `forceSurge` (any value above 0 replaces the formula), `surgeWindowMinutes`, `surgeMax`, `supplyRadiusKm`, `quoteTtlSeconds`.
 
 ## trip-service
 

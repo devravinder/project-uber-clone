@@ -31,14 +31,14 @@ Tab 2 shows every step and the driver moving. Each tab has a "How to..." checkli
 
 What the map shows:
 
-| Mark            | Meaning                                                      |
-| --------------- | ------------------------------------------------------------ |
-| small green dot | an online driver who is free                                 |
-| small amber dot | a driver who has an offer and is deciding                    |
-| small blue dot  | a driver on a trip                                           |
-| big blue dot    | in the driver tab: you; in the rider tab: your driver        |
-| P / D           | pickup / dropoff                                             |
-| orange square   | a surge area: x(multiplier) (recent requests / free drivers) |
+| Mark            | Meaning                                                                                                                                      |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| small green dot | an online driver who is free                                                                                                                 |
+| small amber dot | a driver who has an offer and is deciding                                                                                                    |
+| small blue dot  | a driver on a trip                                                                                                                           |
+| big blue dot    | in the driver tab: you; in the rider tab: your driver                                                                                        |
+| P / D           | pickup / dropoff                                                                                                                             |
+| orange square   | a surge area: x(multiplier) (recent requests / free drivers), see [how the price is calculated](architecture.md#how-the-price-is-calculated) |
 
 Want many drivers without opening tabs? Run `pnpm simulate`: 30 robot drivers go online, wander and accept 90% of offers. Stop it with Ctrl+C; it finishes or cancels its trips and goes offline.
 

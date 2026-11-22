@@ -44,7 +44,7 @@ Design questions about ride-hailing, answered with what this project does. Each 
 ## Pricing
 
 1. How does surge pricing work here?
-   - Demand: trip requests in the pickup's geohash-5 cell over 5 minutes, counted from Kafka with per-minute counters. Supply: available drivers within 3 km. Surge grows with demand per driver, capped at 3.0 (ADR-009).
+   - Demand: trip requests in the pickup's geohash-5 cell over 5 minutes, counted from Kafka with per-minute counters. Supply: available drivers within 3 km. Surge grows with demand per driver, capped at 3.0 (ADR-009). Formula and worked examples: [How the price is calculated](architecture.md#how-the-price-is-calculated).
 2. The price changes between the estimate and the request. What does the rider pay?
    - The quoted fare: quotes are stored for 2 minutes and trip-service charges the quote (ADR-010).
 3. driver-service is down. Can riders still book?

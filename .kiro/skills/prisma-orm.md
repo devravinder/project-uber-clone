@@ -102,6 +102,11 @@ Never use `$queryRawUnsafe` or build SQL from strings.
 - Seeds live in `prisma/seed.ts`, are idempotent (`upsert`), and run on demand only.
 - Tests that need a database use a throwaway schema or database, never a developer's running one.
 
+## Learned in this project
+
+- `pnpm typecheck` runs `prisma generate`, which rewrites `src/generated`; `tsx watch` then restarts the running
+  service. Run request files after the restart, not during it.
+
 ## Known gotchas (from project-twitter-clone)
 
 - Prisma CLI scripts must read the env file: `node --env-file=.env.sample node_modules/prisma/build/index.js <command>`.

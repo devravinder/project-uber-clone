@@ -26,6 +26,57 @@ flowchart LR
 
 Each service owns its data: Postgres databases `riders`, `drivers` and `trips`, and Redis key prefixes `drv:`, `mt:` and `prc:`.
 
+## One ride, end to end
+
+```mermaid
+sequenceDiagram
+  participant RA as rider app
+  participant R as rider-service
+  participant P as pricing-service
+  participant T as trip-service
+  participant K as ub.trip-events
+  participant M as matching-service
+  participant D as driver-service
+  participant G as location-gateway
+  participant DA as driver app
+  RA->>R: estimate
+  R->>P: quote (surge from cell demand and supply)
+  RA->>R: request ride (quote id)
+  R->>T: create trip (one TX: trip + outbox)
+  T-->>K: TripRequested
+  K-->>M: TripRequested
+  M->>D: nearby, reserve nearest
+  M->>G: offer on ub:driver:id
+  G-->>DA: offer (10 s)
+  DA->>M: accept
+  M->>D: assign
+  M->>T: assign (version check)
+  T-->>K: TripMatched
+  K-->>G: TripMatched
+  G-->>RA: trip matched
+  DA->>D: location every few seconds
+  D->>G: ub:loc:id
+  G-->>RA: driver position
+  DA->>T: arrive, start, complete
+  T-->>K: DriverArrived, TripStarted, TripCompleted
+  K-->>D: TripCompleted (driver available again)
+  K-->>G: each status
+  G-->>RA: each status
+```
+
+## Failure modes
+
+| What fails     | What happens                                                                                                                       | Verified |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Redis          | Driver-service and matching answer 503 `REDIS_UNAVAILABLE` within 10 ms; drivers go online again after it returns (no persistence) | yes      |
+| Kafka          | Rides are still created; events wait in the outbox and go out about 3 s after Kafka returns                                        | yes      |
+| driver-service | Quotes still answer with surge 1.0 (supply unknown); matching retries every 2 s                                                    | yes      |
+| trip-service   | rider-service retries "request ride" once, then 503 `TRIPS_UNAVAILABLE`; the same quote works later                                | yes      |
+| Every matcher  | Jobs wait in `mt:due`; the sweeper frees held drivers; a restarted matcher continues                                               | yes      |
+| A gateway      | Sockets reconnect, to either instance; the active trip is sent on connect                                                          | yes      |
+| A driver's app | Heartbeat expires after 30 s and the sweeper takes the driver offline                                                              | yes      |
+| Nobody accepts | Radius grows to 6 km, then `no_drivers` after 60 s (matcher) or 180 s (reaper)                                                     | yes      |
+
 ## driver-service
 
 Driver profiles are in Postgres. Location and availability change every few seconds and live in Redis (ADR-005):

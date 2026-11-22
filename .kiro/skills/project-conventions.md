@@ -37,6 +37,12 @@ description: How this repo is organised, what every task must update, ports, and
 - Services never read another service's database or Redis keys. They use events (Kafka) or HTTP.
 - Endpoints under `/internal/...` are for other services; the web app never calls them.
 
+## Scripts
+
+`scripts/*.mjs` share `scripts/lib.mjs`, use Node built-ins only and set `process.exitCode` instead of calling
+`process.exit`. Test data prefixes: `r`/`d` (seed), `s` (simulator), `l`/`m` (rider load), `p` (location load),
+`h*` (request files), `z*` (scenario scripts).
+
 ## Ports
 
 rider 7201, driver 7202, matching 7203 (second 7213), trip 7204, pricing 7205, gateway 7206 (second 7216),

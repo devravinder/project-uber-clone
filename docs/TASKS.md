@@ -2,16 +2,16 @@
 
 One commit per task, made once its checks pass. `[x]` done and verified, `[~]` partly done (the line says what is missing), `[ ]` not started.
 
-| #   | Task                                                                    | Status  |
-| --- | ----------------------------------------------------------------------- | ------- |
-| 1   | Scaffold: workspace, kit, contracts, infra, six services with `/health` | done    |
-| 2   | driver-service: locations in Redis GEO, nearby search, reservations     | done    |
-| 3   | pricing-service: quotes and surge per geohash cell                      | done    |
-| 4   | trip-service and rider-service: trip state machine, outbox, ride API    | done    |
-| 5   | matching-service: offers with timeouts, no double assignment            | done    |
-| 6   | location-gateway: live location and trip updates over WebSocket         | done    |
-| 7   | Web app: rider, driver and lab screens on a city map                    | done    |
-| 8   | Simulator, load scripts, failure scenarios, architecture docs           | planned |
+| #   | Task                                                                    | Status |
+| --- | ----------------------------------------------------------------------- | ------ |
+| 1   | Scaffold: workspace, kit, contracts, infra, six services with `/health` | done   |
+| 2   | driver-service: locations in Redis GEO, nearby search, reservations     | done   |
+| 3   | pricing-service: quotes and surge per geohash cell                      | done   |
+| 4   | trip-service and rider-service: trip state machine, outbox, ride API    | done   |
+| 5   | matching-service: offers with timeouts, no double assignment            | done   |
+| 6   | location-gateway: live location and trip updates over WebSocket         | done   |
+| 7   | Web app: rider, driver and lab screens on a city map                    | done   |
+| 8   | Simulator, load scripts, failure scenarios, architecture docs           | done   |
 
 ## Task 1: scaffold
 
@@ -100,3 +100,17 @@ Fixed on the way: `startFrom: "latest"` lost the first events on idle partitions
 Verified: a headless Chrome run over the DevTools protocol played a whole trip with two pages (rider on gateway 1, driver on gateway 2) and passed 19 checks: map clicks set pickup and dropoff, the estimate shows the fare, the offer appears on the driver page about 220 ms after the request, accept shows "Driver on the way" to the rider with the moving driver on the map, auto-drive reaches the pickup and the dropoff, each step shows on the rider page, the driver is available again, and the lab shows all 8 services up. Screenshots were checked by eye.
 
 Fixed on the way: the driver saw each offer toast twice (StrictMode's second socket); offers are now announced once per trip.
+
+## Task 8: simulator, load, failure drills, docs
+
+- [x] `pnpm seed`, `pnpm simulate`, `pnpm load:riders`, `pnpm load:locations` (Node built-ins only, shared `scripts/lib.mjs`)
+- [x] Failure drills in `docs/HOW-TO-RUN.md`; failure-mode table in `docs/architecture.md`
+- [x] End-to-end sequence diagram, `docs/INTERVIEW-QUESTIONS.md`, README
+
+Verified: `load:locations` with 200 drivers and 50 in flight: about 11,000 writes a second, p50 3.9 ms, p99 9.6 ms. `simulate --count 30` with `load:riders --count 20`: all 20 matched, the simulator completed trips on its own; a second batch of 10 in the same cell saw surge 3.0 (demand 26, supply 1). Kafka drill: with `ub-kafka` stopped a ride was still created and its event waited in the outbox; 3 s after Kafka started the outbox was empty, and the trip was offered 13 s after the restart.
+
+## Open items
+
+- [~] httpYac itself is not in the local pnpm store, so the `.http` files were run with a small local runner of the same syntax, not with httpYac.
+- [ ] Driver cancel ends the trip; re-matching it would be the next step (ADR-017).
+- [ ] Surge does not smooth across neighbour cells (ADR-009).

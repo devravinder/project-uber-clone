@@ -52,6 +52,30 @@ pnpm start:gateway:2   # second gateway instance on 7216
 
 `pnpm start:services` also starts the second matching instance (7213) and the second gateway (7216). Lab switches are per instance: set them on both, or reset both at the start of a check.
 
+## Scripts
+
+| Command                                  | Does                                                                              |
+| ---------------------------------------- | --------------------------------------------------------------------------------- |
+| `pnpm seed`                              | Riders `r001..r020` and drivers `d001..d050` (idempotent)                         |
+| `pnpm simulate --count 30`               | Drivers `s001..` that go online, wander, accept 90% of offers and drive the trips |
+| `pnpm load:riders --count 20`            | 20 riders request at once near a hotspot; prints surge and time to match          |
+| `pnpm load:locations --drivers 200`      | Location writes as fast as possible for 15 s; prints rate and latency             |
+| `pnpm watch:ws --user <id> --role rider` | Prints what location-gateway pushes to that socket                                |
+
+Options: `simulate --speed 0.15 --accept 0.9 --seconds 0` (0 runs until Ctrl+C), `load:riders --lat --lng --spread --wait --keep`, `load:locations --seconds --concurrency`.
+
+Measured on a laptop: about 11,000 location writes a second into one driver-service (p99 under 10 ms); 20 simultaneous requests against 30 simulated drivers were all matched (p50 about 3 s, p95 about 55 s while drivers drove in); a second batch in the same cell saw surge 3.0.
+
+## Failure drills
+
+| Drill                         | How                                                             | Expect                                                            |
+| ----------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Kafka down                    | `docker stop ub-kafka`, request a ride, `docker start ub-kafka` | 201 for the ride; `GET :7204/admin/outbox` pending, then drained  |
+| Redis down                    | `docker stop ub-redis`                                          | 503 `REDIS_UNAVAILABLE`; after start, drivers go online again     |
+| driver-service down           | stop it, get an estimate                                        | 200 with `supply: null` and surge 1.0                             |
+| Matchers down during an offer | stop 7203 and 7213 while an offer is open                       | the driver is freed by the sweeper; a restarted matcher continues |
+| Gateway switch                | put rider and driver on different gateways in the web app       | locations and statuses still arrive                               |
+
 ## Watch a socket
 
 ```bash

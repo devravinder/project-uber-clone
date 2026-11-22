@@ -147,3 +147,33 @@
 
 - Decision: a `TripRequested` older than `matchTimeoutMs` creates no job. A new consumer group starts at the earliest offset, so without this a restart with a fresh group would try to match every trip ever requested.
 - Rejected: starting matching's group at `latest`. A trip requested while the matcher was down would then never be matched.
+
+## ADR-024: A stateless WebSocket gateway between Redis pub/sub and Kafka
+
+- Context: a rider and their driver may be connected to different gateway instances, and any instance may die.
+- Decision: location-gateway keeps only who is connected to it. Live data reaches it two ways:
+  - Redis pub/sub for lossy, high-rate data: `ub:loc:<driverId>` (locations) and `ub:driver:<driverId>` (offers). An instance subscribes to a channel only while one of its sockets needs it, and unsubscribes when the trip ends or the socket closes.
+  - Kafka for trip state: each instance has its own consumer group (`location-gateway-<port>`), so every instance sees every trip event and pushes it to its own sockets.
+- On connect, the gateway reads the active trip from trip-service and sends it at once, so a reconnect never waits for the next event.
+- Rejected:
+  - Sticky routing (rider and driver forced onto one instance): breaks as soon as either reconnects elsewhere.
+  - Trip state over Redis pub/sub too: a status change missed during a reconnect would be gone; Kafka keeps it and the connect-time read covers the gap.
+- Verified: rider on 7206 and driver on 7216, locations arrive in 16–18 ms; a rider who reconnects on 7216 mid-trip gets the trip in about 55 ms and keeps getting locations; after completion no location channel stays subscribed.
+
+## ADR-025: The caller is named in the WebSocket URL
+
+- Decision: `ws://<gateway>/ws?user=<id>&role=rider|driver`. A bad or missing value closes the socket with 1008.
+- Rejected: an `X-User` header like the REST APIs. Browsers cannot set headers on a WebSocket. A real system would pass a short-lived token in the URL instead.
+
+## ADR-026: Gateway groups start from the earliest offset and skip old events
+
+- Context: with `startFrom: "latest"`, the first events on a partition that had no committed offset yet were lost: a rider did not see their trip get matched.
+- Decision: the gateway's groups start at `earliest` like every other consumer, and skip events older than 60 s. A new instance reads the history once, quickly, and pushes nothing from it.
+- Verified: a fresh group read 132 old events, skipped all 132, then delivered every live event.
+
+## ADR-027: Short Kafka session and rebalance timeouts
+
+- Context: the client's defaults (session 60 s, rebalance 102 s) meant a restarted or killed instance waited 33–100 s before its consumer received anything.
+- Decision: the kit sets `sessionTimeout` 10 s, `rebalanceTimeout` 15 s, `heartbeatInterval` 3 s for every consumer.
+- Rejected: static group membership (`group.instance.id`). It avoids the rebalance, but needs a stable id per instance and still waits a full session after a crash.
+- Verified: after a restart, driver-service and the second gateway consumed again 1–2 s after `/health` answered.

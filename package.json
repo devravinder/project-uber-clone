@@ -28,6 +28,7 @@
     "simulate": "node scripts/simulate-drivers.mjs",
     "load:riders": "node scripts/load-riders.mjs",
     "load:locations": "node scripts/load-locations.mjs",
+    "watch:ws": "node scripts/watch-ws.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint:md": "markdownlint-cli2 \"**/*.md\" \"#**/node_modules\"",
     "format:md": "markdownlint-cli2 --fix \"**/*.md\" \"#**/node_modules\""

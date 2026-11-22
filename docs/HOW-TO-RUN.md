@@ -43,6 +43,15 @@ pnpm start:gateway:2   # second gateway instance on 7216
 
 `pnpm start:services` also starts the second matching instance (7213) and the second gateway (7216). Lab switches are per instance: set them on both, or reset both at the start of a check.
 
+## Watch a socket
+
+```bash
+pnpm watch:ws --user zr001 --role rider
+pnpm watch:ws --user d001 --role driver --gateway ws://localhost:7216
+```
+
+It prints every message location-gateway pushes to that socket: `hello`, `trip`, `location`, `offer`, `offer-closed`.
+
 ## Request files
 
 `http/*.http` are httpYac files, one per service. Run them with the httpYac CLI or the VS Code extension `anweber.vscode-httpyac`. Each file resets its switches first and can run twice in a row.

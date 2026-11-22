@@ -9,7 +9,7 @@ One commit per task, made once its checks pass. `[x]` done and verified, `[~]` p
 | 3   | pricing-service: quotes and surge per geohash cell                      | done    |
 | 4   | trip-service and rider-service: trip state machine, outbox, ride API    | done    |
 | 5   | matching-service: offers with timeouts, no double assignment            | done    |
-| 6   | location-gateway: live location and trip updates over WebSocket         | planned |
+| 6   | location-gateway: live location and trip updates over WebSocket         | done    |
 | 7   | Web app: rider, driver and lab screens on a city map                    | planned |
 | 8   | Simulator, load scripts, failure scenarios, architecture docs           | planned |
 
@@ -76,3 +76,16 @@ Gotcha: right after driver-service restarts, its consumer group needs about 30 s
 Verified: `http/matching.http` passes twice (26 requests). A scenario script with both instances passed 27 checks: the nearest driver gets the first offer about 250 ms after the request; decline moves to the next driver in about 250 ms; an ignored 3 s offer expires and the radius grows to reach a driver 4.4 km away; a cancel during an offer frees the driver in about 260 ms; an unaccepted trip ends as `no_drivers`; 10 concurrent trips with 10 drivers are all matched in about 1.3 s with no driver used twice and offers from both instances; paused matchers leave the job in `mt:due`; with both matchers stopped the sweeper frees the held driver and a restarted matcher continues the job.
 
 Fixed on the way: node-redis 6 answers `HGETALL` and `ZRANGE ... WITHSCORES` in RESP3 shapes; the job store reads both.
+
+## Task 6: location-gateway
+
+- [x] WebSocket on `/ws?user=&role=` attached to the Nest HTTP server; 1008 for a bad caller; ping every 20 s
+- [x] `hello` and the active trip on connect
+- [x] Ref-counted Redis subscriptions: driver inbox (offers) while the driver is connected, driver location while a rider's trip is live
+- [x] Trip events from Kafka with one group per instance, pushed to the trip's rider and driver; events older than 60 s skipped
+- [x] Two instances (7206, 7216); `GET /admin/stats`; `pnpm watch:ws` prints a socket's messages
+- [x] Kit: Kafka session 10 s and rebalance 15 s for every consumer
+
+Verified: a Node script with real sockets (rider on 7206, driver on 7216) passed 14 checks: the offer reaches the driver in about 300 ms after the request; the rider sees `matched` about 120 ms after accept; 5 locations arrive across instances in 16–18 ms each; a reconnect on the other instance gets the current trip in about 55 ms; statuses arrive in order; after completion no location reaches the rider and no channel stays subscribed. `http/gateway.http` passes, and all seven request files pass twice in a row (138 requests) after the kit change. A restarted consumer now reads again 1–2 s after `/health` answers (was 33–100 s).
+
+Fixed on the way: `startFrom: "latest"` lost the first events on idle partitions; the gateway now starts at `earliest` and skips old events (ADR-026).

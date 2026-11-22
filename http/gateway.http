@@ -1,0 +1,24 @@
+@gateway = http://localhost:7206
+@gateway2 = http://localhost:7216
+
+# The WebSocket itself is ws://localhost:7206/ws?user=<id>&role=rider|driver.
+# HTTP clients cannot hold it open; use `pnpm watch:ws` (see docs/HOW-TO-RUN.md) to see the messages.
+
+### Connections, subscribed channels and forwarded messages on instance 1
+GET {{gateway}}/admin/stats
+
+?? status == 200
+?? js typeof response.parsedBody.riders === "number"
+?? js typeof response.parsedBody.channels === "number"
+?? js typeof response.parsedBody.tripEvents.seen === "number"
+
+### The same on instance 2
+GET {{gateway2}}/admin/stats
+
+?? status == 200
+?? js typeof response.parsedBody.messagesOut === "number"
+
+### A plain HTTP request to the WebSocket path is not an upgrade: 404
+GET {{gateway}}/ws
+
+?? status == 404

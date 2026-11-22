@@ -10,6 +10,9 @@ import { type BaseConfig, brokersOf, SERVICE_CONFIG } from "./config.js";
 import { backoffMs, sleep } from "./util.js";
 
 const PUBLISH_TIMEOUT_MS = 10_000;
+// Client defaults (60 s, 102 s) made restarted instances wait up to 100 s.
+const SESSION_TIMEOUT_MS = 10_000;
+const REBALANCE_TIMEOUT_MS = 15_000;
 
 export type OutgoingMessage = {
   topic: string;
@@ -108,6 +111,9 @@ export class KafkaConsumers implements OnModuleDestroy {
         clientId: `${this.config.SERVICE_NAME}-${options.groupId}`,
         bootstrapBrokers: brokersOf(this.config),
         deserializers: stringDeserializers,
+        sessionTimeout: SESSION_TIMEOUT_MS,
+        rebalanceTimeout: REBALANCE_TIMEOUT_MS,
+        heartbeatInterval: 3000,
       });
       try {
         const stream = await consumer.consume({

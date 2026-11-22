@@ -36,6 +36,9 @@ the `eventId`.
 | pricing-service  | `pricing-service`         | Counts demand per cell                          |
 | location-gateway | `location-gateway-<port>` | Every instance must see every event (broadcast) |
 
+Every consumer uses the kit's timeouts: session 10 s, rebalance 15 s, heartbeat 3 s (ADR-027), so a restarted
+instance consumes again within seconds.
+
 ## Redis pub/sub channels
 
 | Channel                | Publisher                              | Subscriber       | Payload                             |

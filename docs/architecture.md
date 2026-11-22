@@ -180,3 +180,32 @@ sequenceDiagram
 | `POST /offers/:tripId/accept`     | driver | Matched; 409 if expired, gone or not theirs |
 | `POST /offers/:tripId/decline`    | driver | Next driver right away                      |
 | `GET /admin/jobs`, `/admin/stats` | lab    | Open jobs with due times; counters          |
+
+## location-gateway
+
+```mermaid
+flowchart LR
+  subgraph g1[gateway 7206]
+    s1[rider socket]
+  end
+  subgraph g2[gateway 7216]
+    s2[driver socket]
+  end
+  d[driver-service] -->|"PUBLISH ub:loc:d001"| r[(Redis pub/sub)]
+  m[matching-service] -->|"PUBLISH ub:driver:d001"| r
+  r -->|subscribed while the trip is live| g1
+  r -->|subscribed while the driver is connected| g2
+  k[(ub.trip-events)] -->|group location-gateway-7206| g1
+  k -->|group location-gateway-7216| g2
+  g1 --> s1
+  g2 --> s2
+```
+
+The gateway holds no state but its sockets. On connect it reads the active trip from trip-service and sends it, then keeps the rider subscribed to their driver's location channel only while the trip is `matched`, `arrived` or `in_progress` (ADR-024).
+
+| Message                 | Pushed to        | Source                 |
+| ----------------------- | ---------------- | ---------------------- |
+| `hello`                 | the new socket   | the gateway            |
+| `trip`                  | rider and driver | `ub.trip-events`       |
+| `location`              | the trip's rider | `ub:loc:<driverId>`    |
+| `offer`, `offer-closed` | the driver       | `ub:driver:<driverId>` |

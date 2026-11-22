@@ -15,7 +15,7 @@ description: Structure and rules of apps/web (React + Vite + Tailwind, SVG city 
 | `src/components/rider-view.tsx`  | Pick on the map, estimate, request, live trip with the driver's position                        |
 | `src/components/driver-view.tsx` | Online/offline, heartbeat, offers with countdown, trip steps, auto-drive                        |
 | `src/components/lab-view.tsx`    | Health, counters, open matching jobs, switches, seed buttons, scenarios                         |
-| `src/components/toast.tsx`       | Toasts and `useAction`, which shows an API error's `code`                                       |
+| `src/components/toast.tsx`       | Toasts with a close x and "Clear all", and `useAction`, which shows an API error's `code`       |
 
 ## Rules
 

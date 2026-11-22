@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TripStatus {
+  requested
+  matched
+  arrived
+  in_progress
+  completed
+  cancelled
+  no_drivers
+
+  @@map("trip_status")
+}
+
+enum CancelledBy {
+  rider
+  driver
+  system
+
+  @@map("cancelled_by")
+}
+
+// Partial unique indexes (one active trip per rider and per driver) live in the migration.
+model Trip {
+  id           String       @id
+  riderId      String       @map("rider_id")
+  driverId     String?      @map("driver_id")
+  status       TripStatus   @default(requested)
+  pickupLat    Float        @map("pickup_lat")
+  pickupLng    Float        @map("pickup_lng")
+  dropoffLat   Float        @map("dropoff_lat")
+  dropoffLng   Float        @map("dropoff_lng")
+  distanceKm   Float        @map("distance_km")
+  fareMinor    Int          @map("fare_minor")
+  currency     String
+  surge        Float
+  quoteId      String       @unique @map("quote_id")
+  version      Int          @default(0)
+  cancelReason String?      @map("cancel_reason")
+  cancelledBy  CancelledBy? @map("cancelled_by")
+  requestedAt  DateTime     @default(now()) @map("requested_at") @db.Timestamptz(3)
+  matchedAt    DateTime?    @map("matched_at") @db.Timestamptz(3)
+  arrivedAt    DateTime?    @map("arrived_at") @db.Timestamptz(3)
+  startedAt    DateTime?    @map("started_at") @db.Timestamptz(3)
+  endedAt      DateTime?    @map("ended_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([riderId, id])
+  @@index([driverId, id])
+  @@map("trips")
+}
+
+model Outbox {
+  id            String    @id
+  topic         String
+  key           String
+  type          String
+  payload       String
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedUntil   DateTime? @map("locked_until") @db.Timestamptz(3)
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // Partial index outbox_pending_idx lives in the migration.
+  @@map("outbox")
+}

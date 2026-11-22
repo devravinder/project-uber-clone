@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Profiles only. Location and availability change every few seconds and live in Redis.
+model Driver {
+  id        String   @id
+  name      String
+  vehicle   String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("drivers")
+}

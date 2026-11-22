@@ -1,0 +1,44 @@
+{
+  "name": "project-uber-clone",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Learning-oriented ride-hailing clone - geo search, matching, trip state machine, live location",
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "start:pods": "docker compose -f infra/docker-compose.yaml up -d --wait",
+    "stop:pods": "docker compose -f infra/docker-compose.yaml down",
+    "reset:pods": "docker compose -f infra/docker-compose.yaml down -v",
+    "logs:pods": "docker compose -f infra/docker-compose.yaml logs -f",
+    "start:services": "pnpm -r --parallel --filter @apps/rider-service --filter @apps/driver-service --filter @apps/matching-service --filter @apps/trip-service --filter @apps/pricing-service --filter @apps/location-gateway --filter @apps/web run \"/^dev(:2)?$/\"",
+    "start:rider": "pnpm --filter @apps/rider-service dev",
+    "start:driver": "pnpm --filter @apps/driver-service dev",
+    "start:matching": "pnpm --filter @apps/matching-service dev",
+    "start:matching:2": "pnpm --filter @apps/matching-service dev:2",
+    "start:trip": "pnpm --filter @apps/trip-service dev",
+    "start:pricing": "pnpm --filter @apps/pricing-service dev",
+    "start:gateway": "pnpm --filter @apps/location-gateway dev",
+    "start:gateway:2": "pnpm --filter @apps/location-gateway dev:2",
+    "start:web": "pnpm --filter @apps/web dev",
+    "seed": "node scripts/seed.mjs",
+    "simulate": "node scripts/simulate-drivers.mjs",
+    "load:riders": "node scripts/load-riders.mjs",
+    "load:locations": "node scripts/load-locations.mjs",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint:md": "markdownlint-cli2 \"**/*.md\" \"#**/node_modules\"",
+    "format:md": "markdownlint-cli2 --fix \"**/*.md\" \"#**/node_modules\""
+  },
+  "devDependencies": {
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.8.1",
+    "husky": "9.1.7",
+    "lint-staged": "16.4.0",
+    "markdownlint-cli2": "0.15.0",
+    "oxlint": "1.92.0",
+    "prettier": "3.9.10"
+  }
+}

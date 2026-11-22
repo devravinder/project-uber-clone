@@ -1,0 +1,58 @@
+@rider = http://localhost:7201
+@driver = http://localhost:7202
+@matching = http://localhost:7203
+@matching2 = http://localhost:7213
+@trip = http://localhost:7204
+@pricing = http://localhost:7205
+@gateway = http://localhost:7206
+@gateway2 = http://localhost:7216
+
+### rider-service is up with its database
+GET {{rider}}/health
+
+?? status == 200
+?? body service == rider-service
+?? body postgres.ok == true
+
+### driver-service is up with its database and Redis
+GET {{driver}}/health
+
+?? status == 200
+?? body postgres.ok == true
+?? body redis.ok == true
+
+### matching-service is up with Redis
+GET {{matching}}/health
+
+?? status == 200
+?? body redis.ok == true
+
+### second matching instance is up
+GET {{matching2}}/health
+
+?? status == 200
+?? body service == matching-service-2
+
+### trip-service is up with its database
+GET {{trip}}/health
+
+?? status == 200
+?? body postgres.ok == true
+
+### pricing-service is up with Redis
+GET {{pricing}}/health
+
+?? status == 200
+?? body redis.ok == true
+
+### location-gateway is up with Redis
+GET {{gateway}}/health
+
+?? status == 200
+?? body redis.ok == true
+
+### second gateway instance is up
+GET {{gateway2}}/health
+
+?? status == 200
+?? body service == location-gateway-2

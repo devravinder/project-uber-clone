@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Rider {
+  id        String   @id
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("riders")
+}

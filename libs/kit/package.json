@@ -1,0 +1,32 @@
+{
+  "name": "@apps/kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@apps/contracts": "workspace:*",
+    "@nestjs/common": "12.4.0",
+    "@nestjs/core": "12.4.0",
+    "@nestjs/platform-express": "12.4.0",
+    "@platformatic/kafka": "2.14.0",
+    "pg": "8.23.1",
+    "redis": "6.3.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.5",
+    "@types/pg": "8.23.1",
+    "typescript": "7.0.2"
+  }
+}

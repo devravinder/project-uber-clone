@@ -1,0 +1,9 @@
+{
+  // Rationale: see the markdown-lint skill.
+  "default": true,
+  "MD013": false, // line length
+  "MD033": false, // inline HTML
+  "MD060": false, // table pipe spacing
+  "MD041": true, // first line is H1
+  "MD040": true, // code fences need a language
+}

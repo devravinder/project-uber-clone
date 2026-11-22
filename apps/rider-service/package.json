@@ -1,0 +1,30 @@
+{
+  "name": "@apps/rider-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db:generate": "node --env-file=.env.sample node_modules/prisma/build/index.js generate --no-hints",
+    "db:deploy": "node --env-file=.env.sample node_modules/prisma/build/index.js migrate deploy",
+    "dev": "pnpm db:generate && pnpm db:deploy && tsx watch --env-file=.env.sample src/main.ts",
+    "start": "pnpm db:generate && pnpm db:deploy && tsx --env-file=.env.sample src/main.ts",
+    "typecheck": "pnpm db:generate && tsc --noEmit"
+  },
+  "dependencies": {
+    "@apps/contracts": "workspace:*",
+    "@apps/kit": "workspace:*",
+    "@nestjs/common": "12.4.0",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.5",
+    "prisma": "7.10.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

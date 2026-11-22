@@ -177,3 +177,11 @@
 - Decision: the kit sets `sessionTimeout` 10 s, `rebalanceTimeout` 15 s, `heartbeatInterval` 3 s for every consumer.
 - Rejected: static group membership (`group.instance.id`). It avoids the rebalance, but needs a stable id per instance and still waits a full session after a crash.
 - Verified: after a restart, driver-service and the second gateway consumed again 1–2 s after `/health` answered.
+
+## ADR-028: Web app with an SVG map and direct WebSockets
+
+- Decision: one React app with Rider, Driver and Lab tabs. The map is an SVG of the demo city drawn from `CITY` in the contracts; clicks become coordinates. REST goes through the Vite proxy; WebSockets connect straight to a chosen gateway instance.
+- Rejected:
+  - A tile map library: needs tiles from the network (see `local-only`), and street detail adds nothing here.
+  - Proxying the WebSocket through Vite: hides which gateway instance a tab is on, and that choice is the point of the cross-instance demo.
+- Consequences: two browser tabs, one rider and one driver, play a whole trip. The driver tab's auto-drive moves 100 m per second so a trip takes about a minute.

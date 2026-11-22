@@ -17,6 +17,15 @@ pnpm start:services    # every service in one terminal; migrations run on start
 
 Check that everything is up: run `http/health.http`, or open `http://localhost:7201/health` and the other ports below.
 
+## Play a trip in the browser
+
+1. Open `http://localhost:5320`, go to the Lab tab and press "Seed 20 riders" and "Seed 50 drivers".
+2. Driver tab: choose `d001`, click the map where the driver is, press "Go online here".
+3. Open a second browser tab. Rider tab: choose `r001`, click the pickup near the driver, then the dropoff, press "Get estimate", then "Request ride".
+4. Back in the driver tab: the offer appears with a 10 s countdown. Accept it. With auto-drive on, the driver moves to the pickup; press "Arrived at pickup", "Start trip", then "Complete trip" at the dropoff.
+
+The rider tab shows every step and the driver moving. Choose different gateways in the two tabs to see the cross-instance path.
+
 ## Ports
 
 | App              | Port                      |

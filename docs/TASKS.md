@@ -10,7 +10,7 @@ One commit per task, made once its checks pass. `[x]` done and verified, `[~]` p
 | 4   | trip-service and rider-service: trip state machine, outbox, ride API    | done    |
 | 5   | matching-service: offers with timeouts, no double assignment            | done    |
 | 6   | location-gateway: live location and trip updates over WebSocket         | done    |
-| 7   | Web app: rider, driver and lab screens on a city map                    | planned |
+| 7   | Web app: rider, driver and lab screens on a city map                    | done    |
 | 8   | Simulator, load scripts, failure scenarios, architecture docs           | planned |
 
 ## Task 1: scaffold
@@ -89,3 +89,14 @@ Fixed on the way: node-redis 6 answers `HGETALL` and `ZRANGE ... WITHSCORES` in 
 Verified: a Node script with real sockets (rider on 7206, driver on 7216) passed 14 checks: the offer reaches the driver in about 300 ms after the request; the rider sees `matched` about 120 ms after accept; 5 locations arrive across instances in 16–18 ms each; a reconnect on the other instance gets the current trip in about 55 ms; statuses arrive in order; after completion no location reaches the rider and no channel stays subscribed. `http/gateway.http` passes, and all seven request files pass twice in a row (138 requests) after the kit change. A restarted consumer now reads again 1–2 s after `/health` answers (was 33–100 s).
 
 Fixed on the way: `startFrom: "latest"` lost the first events on idle partitions; the gateway now starts at `earliest` and skips old events (ADR-026).
+
+## Task 7: web app
+
+- [x] Rider tab: pick pickup and dropoff on the map, estimate with surge and the price-hold countdown, request, live status and driver position, cancel
+- [x] Driver tab: online at a map point, heartbeat, offers pushed over WebSocket with a countdown, accept and decline, arrive, start, complete, driver cancel, auto-drive
+- [x] Lab tab: health of all 8 instances, counters, open matching jobs, switches per service, seed buttons, scenarios to try
+- [x] Either tab can choose gateway 1 or 2; selections are per browser tab
+
+Verified: a headless Chrome run over the DevTools protocol played a whole trip with two pages (rider on gateway 1, driver on gateway 2) and passed 19 checks: map clicks set pickup and dropoff, the estimate shows the fare, the offer appears on the driver page about 220 ms after the request, accept shows "Driver on the way" to the rider with the moving driver on the map, auto-drive reaches the pickup and the dropoff, each step shows on the rider page, the driver is available again, and the lab shows all 8 services up. Screenshots were checked by eye.
+
+Fixed on the way: the driver saw each offer toast twice (StrictMode's second socket); offers are now announced once per trip.

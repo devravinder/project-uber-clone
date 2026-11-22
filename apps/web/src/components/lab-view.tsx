@@ -4,7 +4,7 @@ import { usePoll } from "../hooks.js";
 import { useAction } from "./toast.js";
 
 const SCENARIOS = [
-  "Decline or ignore an offer in the Driver tab: the next nearest driver gets it, and the radius grows when nobody is free.",
+  "Decline or ignore an offer in the 'I am a driver' tab: the next nearest driver gets it, and the radius grows when nobody is free.",
   "Open the rider and the driver on different gateways: locations still arrive (Redis pub/sub) and so do trip updates (Kafka, one group per gateway).",
   "Set pricing forceSurge to 2, or run `pnpm load:riders` near few drivers: the cell turns orange and quotes go up.",
   "Set matching paused on both instances: requests wait in mt:due; resume and they are offered.",
@@ -191,7 +191,9 @@ function Jobs() {
           </tbody>
         </table>
       ) : (
-        <div className="text-sm text-slate-500">None. Request a ride in the Rider tab.</div>
+        <div className="text-sm text-slate-500">
+          None. Request a ride in the 'I am a rider' tab.
+        </div>
       )}
     </div>
   );

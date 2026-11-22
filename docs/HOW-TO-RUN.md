@@ -17,14 +17,32 @@ pnpm start:services    # every service in one terminal; migrations run on start
 
 Check that everything is up: run `http/health.http`, or open `http://localhost:7201/health` and the other ports below.
 
-## Play a trip in the browser
+## Try it in the browser
 
-1. Open `http://localhost:5320`, go to the Lab tab and press "Seed 20 riders" and "Seed 50 drivers".
-2. Driver tab: choose `d001`, click the map where the driver is, press "Go online here".
-3. Open a second browser tab. Rider tab: choose `r001`, click the pickup near the driver, then the dropoff, press "Get estimate", then "Request ride".
-4. Back in the driver tab: the offer appears with a 10 s countdown. Accept it. With auto-drive on, the driver moves to the pickup; press "Arrived at pickup", "Start trip", then "Complete trip" at the dropoff.
+No seed step is needed: on the first visit the web app creates riders `r001..r020` and drivers `d001..d050` if the databases are empty.
 
-The rider tab shows every step and the driver moving. Choose different gateways in the two tabs to see the cross-instance path.
+1. Open `http://localhost:5320` in two browser tabs.
+2. Tab 1, "I am a driver": `d001` is selected. Click the map where the driver should be (the big blue dot moves there), then press "Go online here". Status shows `available` and a small green dot appears on every map.
+3. Tab 2, "I am a rider": `r001` is selected. Click the map near the driver for the pickup (P), click again for the dropoff (D). The panel lists the free drivers your request will be offered to, nearest first.
+4. Press "Get estimate", then "Request ride". The trip card shows who is being asked and how many seconds they have.
+5. Tab 1 shows the offer with a 10 s countdown. Press "Accept". With auto-drive on, the driver drives to the pickup; press "Arrived at pickup", "Start trip", and at the dropoff "Complete trip".
+
+Tab 2 shows every step and the driver moving. Each tab has a "How to..." checklist that marks what is done and says what to do next.
+
+What the map shows:
+
+| Mark            | Meaning                                                      |
+| --------------- | ------------------------------------------------------------ |
+| small green dot | an online driver who is free                                 |
+| small amber dot | a driver who has an offer and is deciding                    |
+| small blue dot  | a driver on a trip                                           |
+| big blue dot    | in the driver tab: you; in the rider tab: your driver        |
+| P / D           | pickup / dropoff                                             |
+| orange square   | a surge area: x(multiplier) (recent requests / free drivers) |
+
+Want many drivers without opening tabs? Run `pnpm simulate`: 30 robot drivers go online, wander and accept 90% of offers. Stop it with Ctrl+C; it finishes or cancels its trips and goes offline.
+
+Where a request goes: matching-service asks the nearest free driver within 2 km first. Each driver gets 10 s; on decline or timeout the next one is asked, and the circle grows to 4 and 6 km. After 60 s without a yes the trip ends as "No driver accepted".
 
 ## Ports
 

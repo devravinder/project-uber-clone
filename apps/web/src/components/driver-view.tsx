@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, money, type TripStep } from "../api.js";
 import { GATEWAYS, useGateway, useNow, usePoll, useTabState } from "../hooks.js";
 import { CityMap } from "./city-map.js";
+import { Guide } from "./guide.js";
 import { useAction, useToast } from "./toast.js";
 
 const HEARTBEAT_MS = 5000;
@@ -41,6 +42,10 @@ export function DriverView() {
   const announced = useRef<string | null>(null);
   const posRef = useRef(pos);
   posRef.current = pos;
+
+  useEffect(() => {
+    if (!driver && drivers.data?.items.length) setDriver(drivers.data.items[0]!.id);
+  }, [driver, drivers.data, setDriver]);
 
   useEffect(() => {
     setOffer(null);
@@ -133,6 +138,31 @@ export function DriverView() {
         }
       />
       <div className="flex flex-col gap-4">
+        <Guide
+          id="driver"
+          title="How to drive"
+          steps={[
+            { label: "Choose a driver below", done: Boolean(driver) },
+            {
+              label: "Click the map where you are (the big blue dot moves there)",
+              done:
+                status !== "offline" || pos.lat !== CITY.center.lat || pos.lng !== CITY.center.lng,
+              hint: "Pick a spot close to where the rider will set the pickup: requests go to the nearest free driver within 2-6 km.",
+            },
+            { label: 'Press "Go online here"', done: status !== "offline" },
+            {
+              label: "Wait for a ride request",
+              done: Boolean(offer) || Boolean(trip),
+              hint: 'In the other tab ("I am a rider"), set a pickup near you, get an estimate and request a ride. The offer appears here.',
+            },
+            { label: 'Press "Accept" within 10 s', done: Boolean(trip) },
+            {
+              label: 'Drive: "Arrived at pickup", "Start trip", "Complete trip"',
+              done: false,
+              hint: "With auto-drive on, the blue dot drives itself to the pickup and then the dropoff.",
+            },
+          ]}
+        />
         <div className="card flex flex-col gap-2">
           <label className="text-sm font-medium" htmlFor="driver">
             Driver
@@ -144,7 +174,6 @@ export function DriverView() {
               value={driver}
               onChange={(e) => setDriver(e.target.value)}
             >
-              <option value="">choose a driver</option>
               {drivers.data?.items.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.id} - {d.vehicle}
@@ -209,6 +238,17 @@ export function DriverView() {
             Auto-drive to the pickup and dropoff
           </label>
         </div>
+
+        {status === "available" && !offer && !trip && (
+          <div className="card text-sm" data-testid="waiting">
+            <div className="font-semibold">Online and waiting for a request</div>
+            <div className="text-slate-600">
+              A rider request goes to the nearest free driver. Offers appear here with a 10 s
+              countdown. Keep this tab open: it sends your location every 5 s, and after 30 s
+              without one you are taken offline.
+            </div>
+          </div>
+        )}
 
         {offer && (
           <div className="card flex flex-col gap-2 border-amber-400" data-testid="offer">

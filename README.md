@@ -28,11 +28,10 @@ A learning project for ride-hailing system design: drivers stream their location
 pnpm install --offline
 pnpm start:pods
 pnpm start:services
-pnpm seed
-pnpm simulate          # optional: 30 drivers that drive and accept on their own
+pnpm simulate          # optional: 30 robot drivers that drive and accept on their own
 ```
 
-Then open `http://localhost:5320`.
+Then open `http://localhost:5320` in two browser tabs: "I am a driver" in one (click the map, "Go online here"), "I am a rider" in the other (click pickup, click dropoff, "Get estimate", "Request ride"). Demo riders and drivers are created on the first visit. Step-by-step: [Try it in the browser](docs/HOW-TO-RUN.md#try-it-in-the-browser).
 
 ## Docs
 

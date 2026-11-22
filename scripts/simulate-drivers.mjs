@@ -113,7 +113,20 @@ await main(async () => {
     }
     await sleep(Math.max(0, options.tick - (Date.now() - tickStart)));
   }
-  for (const d of drivers.filter((x) => !x.trip)) {
+  // Leave no trip half done: finish rides in progress, cancel the rest, then go offline.
+  for (const d of drivers) {
+    if (d.trip?.status === "in_progress") {
+      await call("trip", `/trips/${d.trip.id}/complete`, { method: "POST", user: d.id });
+    } else if (d.trip) {
+      await call("trip", `/trips/${d.trip.id}/cancel`, {
+        method: "POST",
+        user: d.id,
+        body: { reason: "simulator stopped" },
+      });
+    }
+  }
+  await sleep(1500);
+  for (const d of drivers) {
     await call("driver", `/drivers/${d.id}/offline`, { method: "PUT", user: d.id }).catch(
       () => undefined,
     );

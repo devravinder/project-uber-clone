@@ -109,6 +109,18 @@ Fixed on the way: the driver saw each offer toast twice (StrictMode's second soc
 
 Verified: `load:locations` with 200 drivers and 50 in flight: about 11,000 writes a second, p50 3.9 ms, p99 9.6 ms. `simulate --count 30` with `load:riders --count 20`: all 20 matched, the simulator completed trips on its own; a second batch of 10 in the same cell saw surge 3.0 (demand 26, supply 1). Kafka drill: with `ub-kafka` stopped a ride was still created and its event waited in the outbox; 3 s after Kafka started the outbox was empty, and the trip was offered 13 s after the restart.
 
+## Task 9: easy to try
+
+- [x] Demo riders and drivers created on the first visit when the databases are empty; `r001` and `d001` preselected
+- [x] "How to take a ride" and "How to drive" checklists that mark done steps and explain the next one
+- [x] Map legend for every mark; driver ids next to the dots when 20 or fewer are online
+- [x] Rider: free drivers near the pickup before requesting; live matching progress after (who is asked, seconds left, declined, radius, wait)
+- [x] Driver: "Online and waiting" card that says where requests come from
+- [x] `GET /trips/:tripId/progress` on matching-service
+- [x] The simulator finishes or cancels its trips when it stops, so no driver stays "on trip" forever
+
+Verified: the headless Chrome run passed 21 checks, including the checklists and legend, `d001` listed as the first driver to be asked, and "Asking d001" on the rider page about 0.8 s after the request. `http/matching.http` passes twice (28 requests). The auto-seed path was not run against an empty database (the local one already had data); it calls the same idempotent seed endpoints as `pnpm seed`.
+
 ## Open items
 
 - [~] httpYac itself is not in the local pnpm store, so the `.http` files were run with a small local runner of the same syntax, not with httpYac.

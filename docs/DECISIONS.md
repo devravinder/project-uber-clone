@@ -185,3 +185,9 @@
   - A tile map library: needs tiles from the network (see `local-only`), and street detail adds nothing here.
   - Proxying the WebSocket through Vite: hides which gateway instance a tab is on, and that choice is the point of the cross-instance demo.
 - Consequences: two browser tabs, one rider and one driver, play a whole trip. The driver tab's auto-drive moves 100 m per second so a trip takes about a minute.
+
+## ADR-029: Show the rider who is being asked
+
+- Context: after "Request ride" the rider saw only "Looking for a driver..." and could not tell where the request went or why nothing happened.
+- Decision: matching-service exposes `GET /trips/:tripId/progress` (state, radius, the driver offered now, seconds left, drivers who declined or timed out). Before requesting, the rider tab lists the free drivers near the pickup from driver-service `GET /drivers/nearby`. The web app also creates demo riders and drivers on the first visit, preselects `r001` and `d001`, and shows a checklist per tab.
+- Rejected: pushing matching progress over the WebSocket. It needs a new channel per rider for something a 1 s poll shows well enough in a demo; real apps hide most of this from riders anyway.

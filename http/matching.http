@@ -76,6 +76,15 @@ X-User: hm001
 ?? body offer.attempt == 1
 ?? js response.parsedBody.offer !== null && response.parsedBody.offer.distanceToPickupKm < 0.5
 
+### The rider can see who is being asked
+GET {{matching}}/trips/{{ride.id}}/progress
+
+?? status == 200
+?? body state == offered
+?? body offerDriver == hm001
+?? body attempt == 1
+?? body offerExpiresAt isString
+
 ### A driver without the offer cannot decline it: 409 OFFER_NOT_FOUND
 POST {{matching}}/offers/{{ride.id}}/decline
 X-User: hm999
@@ -102,6 +111,13 @@ X-User: hm001
 ?? status == 200
 ?? body status == matched
 ?? body driverId == hm001
+
+### After the match the progress is done
+GET {{matching}}/trips/{{ride.id}}/progress
+
+?? status == 200
+?? body state == done
+?? body offerDriver == null
 
 ### Accepting again finds no open offer: 409
 POST {{matching}}/offers/{{ride.id}}/accept

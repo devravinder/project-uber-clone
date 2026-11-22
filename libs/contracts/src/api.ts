@@ -126,6 +126,19 @@ export type Offer = {
   expiresAt: string;
 };
 
+// What the matcher does for one trip: lets a rider see who is asked.
+export type MatchingProgress = {
+  tripId: string;
+  state: "searching" | "offered" | "done";
+  radiusKm: number | null;
+  attempt: number;
+  offerDriver: string | null;
+  offerDistanceKm: number | null;
+  offerExpiresAt: string | null;
+  declined: string[];
+  startedAt: string | null;
+};
+
 export type OfferClosedReason = "accepted" | "declined" | "expired" | "cancelled";
 
 // What location-gateway pushes over the WebSocket.

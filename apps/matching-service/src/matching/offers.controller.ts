@@ -1,4 +1,5 @@
 import { Controller, Get, HttpCode, Inject, Param, Post, Query } from "@nestjs/common";
+import type { MatchingProgress } from "@apps/contracts";
 import { CurrentUser, parseLimit } from "@apps/kit";
 import { JobStore } from "./job.store.js";
 import { MatcherService } from "./matcher.service.js";
@@ -23,6 +24,42 @@ export class OffersController {
   @HttpCode(200)
   decline(@Param("tripId") tripId: string, @CurrentUser() driver: string) {
     return this.matcher.decline(tripId, driver);
+  }
+}
+
+// Read-only view of a trip's job; "done" once matched, cancelled or given up.
+@Controller("trips")
+export class ProgressController {
+  constructor(@Inject(JobStore) private readonly jobs: JobStore) {}
+
+  @Get(":tripId/progress")
+  async progress(@Param("tripId") tripId: string): Promise<MatchingProgress> {
+    const job = await this.jobs.get(tripId);
+    if (!job) {
+      return {
+        tripId,
+        state: "done",
+        radiusKm: null,
+        attempt: 0,
+        offerDriver: null,
+        offerDistanceKm: null,
+        offerExpiresAt: null,
+        declined: [],
+        startedAt: null,
+      };
+    }
+    const offered = Boolean(job.offerDriver) && job.offerUntil > Date.now();
+    return {
+      tripId,
+      state: offered ? "offered" : "searching",
+      radiusKm: job.radiusKm,
+      attempt: job.attempt,
+      offerDriver: offered ? job.offerDriver : null,
+      offerDistanceKm: offered ? job.offerDistanceKm : null,
+      offerExpiresAt: offered ? new Date(job.offerUntil).toISOString() : null,
+      declined: job.declined,
+      startedAt: new Date(job.createdAt).toISOString(),
+    };
   }
 }
 

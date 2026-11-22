@@ -2,6 +2,8 @@ import {
   type DriverProfile,
   type DriverState,
   type LatLng,
+  type MatchingProgress,
+  type NearbyDriver,
   type Offer,
   type OnlineDriver,
   type Page,
@@ -131,6 +133,12 @@ export const api = {
       body: at,
     }),
   onlineDrivers: () => request<{ items: OnlineDriver[] }>("driver", "/drivers/online"),
+  nearby: (at: LatLng, radiusKm = 6) =>
+    request<{ items: NearbyDriver[] }>(
+      "driver",
+      `/drivers/nearby?lat=${at.lat}&lng=${at.lng}&radiusKm=${radiusKm}&limit=10`,
+    ),
+  progress: (tripId: string) => request<MatchingProgress>("matching", `/trips/${tripId}/progress`),
 
   currentOffer: (driver: string) =>
     request<{ offer: Offer | null }>("matching", "/offers/current", { user: driver }),

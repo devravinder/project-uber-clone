@@ -260,3 +260,5 @@ The gateway holds no state but its sockets. On connect it reads the active trip 
 | `trip`                  | rider and driver | `ub.trip-events`       |
 | `location`              | the trip's rider | `ub:loc:<driverId>`    |
 | `offer`, `offer-closed` | the driver       | `ub:driver:<driverId>` |
+
+`GET /trips/:tripId/progress` on matching-service shows a rider who is being asked: state (`searching`, `offered`, `done`), radius, the offered driver and the seconds left, and who declined (ADR-029).

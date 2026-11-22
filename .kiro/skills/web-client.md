@@ -28,6 +28,9 @@ description: Structure and rules of apps/web (React + Vite + Tailwind, SVG city 
 - Keep button texts and `data-testid`s stable; the browser check clicks by text.
 - Port 5320, `strictPort`.
 
+- Each view starts with a `Guide` checklist; when you add a step to a flow, add it there too.
+- `app.tsx` seeds demo riders and drivers when the lists are empty; keep the seed endpoints idempotent.
+
 ## Learned
 
 - React StrictMode opens a second socket briefly in development; announce each offer once (keyed by trip id).

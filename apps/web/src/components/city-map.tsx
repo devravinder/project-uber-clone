@@ -1,5 +1,5 @@
 import { CITY, type LatLng, type OnlineDriver, type SurgeCell } from "@apps/contracts";
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 const SIZE = 1000;
 const GRID_DEG = 0.02;
@@ -105,6 +105,18 @@ export function CityMap({
             </title>
           </circle>
         ))}
+        {drivers.length <= 20 &&
+          drivers.map((d) => (
+            <text
+              key={`${d.driverId}-label`}
+              x={x(d.lng) + 10}
+              y={y(d.lat) - 8}
+              fontSize={16}
+              fill="#334155"
+            >
+              {d.driverId}
+            </text>
+          ))}
         {pickup && <Pin at={pickup} color="#16a34a" label="P" />}
         {dropoff && <Pin at={dropoff} color="#dc2626" label="D" />}
         {tracked && (
@@ -134,17 +146,52 @@ export function CityMap({
           {hint}
         </div>
       )}
-      <div className="mt-1 flex gap-3 text-xs text-slate-500">
-        {Object.entries(STATUS_COLOR)
-          .filter(([s]) => s !== "offline")
-          .map(([s, c]) => (
-            <span key={s} className="flex items-center gap-1">
-              <span className="inline-block h-2 w-2 rounded-full" style={{ background: c }} /> {s}
-            </span>
-          ))}
-        <span>orange cells: surge x (requests / free drivers)</span>
-      </div>
+      <div
+        className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 rounded-md bg-white p-2 text-xs text-slate-600 sm:grid-cols-3"
+        data-testid="legend"
+      >
+        <Legend color={STATUS_COLOR.available!}>small green dot: driver online and free</Legend>
+        <Legend color={STATUS_COLOR.offered!}>small amber dot: driver deciding on an offer</Legend>
+        <Legend color={STATUS_COLOR.on_trip!}>small blue dot: driver on a trip</Legend>
+        <Legend color="#2563eb" big>
+          {trackedLabel ? `big blue dot: ${trackedLabel}` : "big blue dot: you or your driver"}
+        </Legend>
+        <Legend color="#16a34a" text="P">
+          pickup
+        </Legend>
+        <Legend color="#dc2626" text="D">
+          dropoff
+        </Legend>
+        <span className="col-span-full">
+          Orange squares: surge areas, labelled x(multiplier) (requests / free drivers). Hover a dot
+          to see the driver id.
+        </span>
+      </div>{" "}
     </div>
+  );
+}
+
+function Legend({
+  color,
+  big,
+  text,
+  children,
+}: {
+  color: string;
+  big?: boolean;
+  text?: string;
+  children: ReactNode;
+}) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span
+        className={`inline-flex shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white ${big ? "h-3.5 w-3.5 ring-2 ring-white" : text ? "h-3.5 w-3.5" : "h-2 w-2"}`}
+        style={{ background: color }}
+      >
+        {text}
+      </span>
+      {children}
+    </span>
   );
 }
 

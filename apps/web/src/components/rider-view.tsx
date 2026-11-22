@@ -10,9 +10,11 @@ import { useEffect, useState } from "react";
 import { api, money } from "../api.js";
 import { GATEWAYS, useGateway, useNow, usePoll, useTabState } from "../hooks.js";
 import { CityMap } from "./city-map.js";
+import { Guide } from "./guide.js";
 import { useAction } from "./toast.js";
 
 const CANCELLABLE = new Set(["requested", "matched", "arrived"]);
+const ENDED = new Set(["completed", "cancelled", "no_drivers"]);
 const STATUS_TEXT: Record<string, string> = {
   requested: "Looking for a driver...",
   matched: "Driver on the way",
@@ -36,6 +38,21 @@ export function RiderView() {
   const riders = usePoll(() => api.riders(), 10_000);
   const drivers = usePoll(() => api.onlineDrivers(), 2000);
   const cells = usePoll(() => api.surgeCells(), 5000);
+  const searching = trip?.status === "requested";
+  const nearby = usePoll(
+    () => (pickup && !trip ? api.nearby(pickup) : Promise.resolve(null)),
+    2000,
+    [pickup?.lat, pickup?.lng, trip?.id],
+  );
+  const progress = usePoll(
+    () => (trip && searching ? api.progress(trip.id) : Promise.resolve(null)),
+    1000,
+    [trip?.id, searching],
+  );
+
+  useEffect(() => {
+    if (!rider && riders.data?.items.length) setRider(riders.data.items[0]!.id);
+  }, [rider, riders.data, setRider]);
 
   useEffect(() => {
     setTrip(null);
@@ -53,7 +70,7 @@ export function RiderView() {
   });
 
   const pick = (at: LatLng) => {
-    if (!pickup || (pickup && dropoff)) {
+    if (!pickup || dropoff) {
       setPickup(at);
       setDropoff(null);
     } else setDropoff(at);
@@ -66,49 +83,81 @@ export function RiderView() {
       ? Math.max(1, Math.round((haversineKm(driverAt, trip.pickup) / FARE.avgSpeedKmh) * 60))
       : null;
   const quoteLeft = quote ? Math.max(0, Math.round((Date.parse(quote.expiresAt) - now) / 1000)) : 0;
+  const freeDrivers = drivers.data?.items.filter((d) => d.status === "available").length ?? 0;
+  const p = progress.data;
+  const offerLeft = p?.offerExpiresAt
+    ? Math.max(0, Math.round((Date.parse(p.offerExpiresAt) - now) / 1000))
+    : 0;
+  const waited = trip ? Math.round((now - Date.parse(trip.requestedAt)) / 1000) : 0;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+    <div className="grid gap-4 lg:grid-cols-[1fr_400px]">
       <CityMap
         drivers={drivers.data?.items ?? []}
         cells={cells.data?.items ?? []}
         pickup={trip ? trip.pickup : pickup}
         dropoff={trip ? trip.dropoff : dropoff}
         tracked={live ? driverAt : null}
-        trackedLabel={trip?.driverId ?? ""}
-        onPick={trip && CANCELLABLE.has(trip.status) ? undefined : pick}
-        hint={trip ? undefined : !pickup || dropoff ? "click: set pickup" : "click: set dropoff"}
+        trackedLabel={trip?.driverId ? `your driver ${trip.driverId}` : ""}
+        onPick={trip && !ENDED.has(trip.status) ? undefined : pick}
+        hint={
+          trip && !ENDED.has(trip.status)
+            ? undefined
+            : !pickup
+              ? "click the map: set your pickup (P)"
+              : !dropoff
+                ? "click the map: set your dropoff (D)"
+                : "click the map again to start over with a new pickup"
+        }
       />
       <div className="flex flex-col gap-4">
+        <Guide
+          id="rider"
+          title="How to take a ride"
+          steps={[
+            { label: "Choose a rider below", done: Boolean(rider) },
+            {
+              label: `At least one driver online (now: ${freeDrivers} free)`,
+              done: freeDrivers > 0 || Boolean(trip),
+              hint: 'Open a second browser tab, press "I am a driver", click the map near where you will be picked up, then "Go online here". Or run pnpm simulate for 30 robot drivers.',
+            },
+            {
+              label: "Click the map to set your pickup (P)",
+              done: Boolean(pickup) || Boolean(trip),
+            },
+            {
+              label: "Click again to set your dropoff (D)",
+              done: Boolean(dropoff) || Boolean(trip),
+            },
+            {
+              label: 'Press "Get estimate" to see the price',
+              done: Boolean(quote) || Boolean(trip),
+            },
+            { label: 'Press "Request ride"', done: Boolean(trip) },
+            {
+              label: "Wait for a driver to accept",
+              done: Boolean(trip && !["requested"].includes(trip.status)),
+              hint: "The nearest free driver gets a 10 s offer. If you are the driver too, accept it in the driver tab.",
+            },
+          ]}
+        />
+
         <div className="card flex flex-col gap-2">
           <label className="text-sm font-medium" htmlFor="rider">
             Rider
           </label>
-          <div className="flex gap-2">
-            <select
-              id="rider"
-              className="input flex-1"
-              value={rider}
-              onChange={(e) => setRider(e.target.value)}
-            >
-              <option value="">choose a rider</option>
-              {riders.data?.items.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.id} - {r.name}
-                </option>
-              ))}
-            </select>
-            {riders.data?.items.length === 0 && (
-              <button
-                className="btn-light"
-                onClick={() =>
-                  void run(() => api.seedRiders(20), "20 riders added").then(riders.refresh)
-                }
-              >
-                Seed riders
-              </button>
-            )}
-          </div>
+          <select
+            id="rider"
+            className="input"
+            value={rider}
+            onChange={(e) => setRider(e.target.value)}
+          >
+            {riders.data?.items.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.id} - {r.name}
+              </option>
+            ))}
+          </select>
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <select
               className="input"
@@ -122,17 +171,49 @@ export function RiderView() {
                 </option>
               ))}
             </select>
-            {socket.connected ? `live via ${socket.instance}` : rider ? "connecting..." : ""}
+            {socket.connected
+              ? `live updates via ${socket.instance}`
+              : rider
+                ? "connecting..."
+                : ""}
           </div>
         </div>
 
-        {!trip || (!CANCELLABLE.has(trip.status) && trip.status !== "in_progress") ? (
+        {(!trip || ENDED.has(trip.status)) && (
           <div className="card flex flex-col gap-2">
             <div className="text-sm">
-              Pickup: {pickup ? `${pickup.lat}, ${pickup.lng}` : "-"}
+              Pickup: {pickup ? `${pickup.lat}, ${pickup.lng}` : "click the map"}
               <br />
-              Dropoff: {dropoff ? `${dropoff.lat}, ${dropoff.lng}` : "-"}
+              Dropoff:{" "}
+              {dropoff ? `${dropoff.lat}, ${dropoff.lng}` : pickup ? "click the map again" : "-"}
             </div>
+            {pickup && nearby.data && (
+              <div className="rounded-md bg-slate-50 p-2 text-xs" data-testid="nearby">
+                {nearby.data.items.length === 0 ? (
+                  <span className="text-red-700">
+                    No free driver within 6 km of your pickup. A request would end as "no driver".
+                    Put a driver online near P first.
+                  </span>
+                ) : (
+                  <>
+                    <div className="mb-1 font-medium">
+                      Your request will be offered to these free drivers, nearest first:
+                    </div>
+                    <ol className="list-decimal pl-5">
+                      {nearby.data.items.slice(0, 5).map((d) => (
+                        <li key={d.driverId}>
+                          {d.driverId} - {d.distanceKm.toFixed(2)} km away
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="mt-1 text-slate-500">
+                      Each one gets 10 s to accept. The search starts within 2 km and widens to 4
+                      and 6 km.
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             <button
               className="btn"
               disabled={!rider || !pickup || !dropoff}
@@ -156,8 +237,8 @@ export function RiderView() {
                   )}
                 </div>
                 <div className="text-xs text-slate-500">
-                  demand {quote.demand}, free drivers {quote.supply ?? "unknown"}, cell {quote.cell}
-                  ; price held {quoteLeft} s
+                  Price held for {quoteLeft} s. Recent requests here: {quote.demand}, free drivers
+                  nearby: {quote.supply ?? "unknown"}.
                 </div>
                 <button
                   className="btn mt-2 w-full"
@@ -176,11 +257,30 @@ export function RiderView() {
               </div>
             )}
           </div>
-        ) : null}
+        )}
 
         {trip && (
           <div className="card flex flex-col gap-2" data-testid="trip">
             <div className="text-lg font-semibold">{STATUS_TEXT[trip.status]}</div>
+            {searching && p && (
+              <div className="rounded-md bg-amber-50 p-2 text-sm" data-testid="progress">
+                {p.state === "offered" ? (
+                  <div>
+                    Asking <b>{p.offerDriver}</b> ({p.offerDistanceKm?.toFixed(2)} km away):{" "}
+                    {offerLeft} s left to accept.
+                  </div>
+                ) : p.state === "searching" ? (
+                  <div>Searching for a free driver within {p.radiusKm} km of your pickup...</div>
+                ) : (
+                  <div>Matching finished; waiting for the trip update.</div>
+                )}
+                <div className="text-xs text-slate-600">
+                  Drivers asked so far: {p.attempt}
+                  {p.declined.length > 0 && `, declined or timed out: ${p.declined.join(", ")}`}.
+                  Waited {waited} s of 60.
+                </div>
+              </div>
+            )}
             <div className="text-sm text-slate-600">
               {trip.driverId ? `Driver ${trip.driverId}` : "No driver yet"}
               {etaMin !== null && ` - about ${etaMin} min away`}
@@ -191,7 +291,7 @@ export function RiderView() {
             </div>
             <div className="text-xs text-slate-500">
               trip {trip.id}, version {trip.version}
-              {trip.cancelledBy && `, cancelled by ${trip.cancelledBy}`}
+              {trip.cancelledBy && `, ended by ${trip.cancelledBy}`}
             </div>
             {CANCELLABLE.has(trip.status) && (
               <button
@@ -205,7 +305,7 @@ export function RiderView() {
                 Cancel ride
               </button>
             )}
-            {!CANCELLABLE.has(trip.status) && trip.status !== "in_progress" && (
+            {ENDED.has(trip.status) && (
               <button className="btn-light" onClick={() => setTrip(null)}>
                 New ride
               </button>

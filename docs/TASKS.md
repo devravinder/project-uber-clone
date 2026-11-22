@@ -6,7 +6,7 @@ One commit per task, made once its checks pass. `[x]` done and verified, `[~]` p
 | --- | ----------------------------------------------------------------------- | ------- |
 | 1   | Scaffold: workspace, kit, contracts, infra, six services with `/health` | done    |
 | 2   | driver-service: locations in Redis GEO, nearby search, reservations     | done    |
-| 3   | pricing-service: quotes and surge per geohash cell                      | planned |
+| 3   | pricing-service: quotes and surge per geohash cell                      | done    |
 | 4   | trip-service and rider-service: trip state machine, outbox, ride API    | planned |
 | 5   | matching-service: offers with timeouts, no double assignment            | planned |
 | 6   | location-gateway: live location and trip updates over WebSocket         | planned |
@@ -35,3 +35,13 @@ Verified: `pnpm install --offline`, `pnpm start:pods`, all eight instances answe
 - [~] Trip-event consumer (release on `TripCompleted`, `TripCancelled`, `TripNoDrivers`) is wired; it is checked end to end in Task 4, when trip-service produces events
 
 Verified: `http/driver.http` passes twice (29 requests). A scenario script checked the rest: 20 parallel reservations of one driver give exactly one winner; a 1 s offer is freed by the sweeper in about 3 s; a silent driver with a 5 s heartbeat goes offline after about 6 s; `redis-cli SUBSCRIBE ub:loc:<id>` receives the location JSON; with Redis stopped a location update answers 503 `REDIS_UNAVAILABLE` in 9 ms and `/health` answers 503.
+
+## Task 3: pricing-service
+
+- [x] `POST /quotes`: haversine distance, duration at 24 km/h, base + per km + per minute, minimum fare, whole-unit rounding
+- [x] Quotes saved in Redis with a 120 s TTL; `GET /quotes/:id` answers 404 `QUOTE_NOT_FOUND` once expired
+- [x] Demand per geohash cell and minute from `TripRequested` events, deduped by event id in the same Lua script
+- [x] Supply from driver-service nearby search; on failure the quote answers with `supply: null` and no surge
+- [x] `GET /surge`, `GET /surge/cells`, switches `surgeEnabled`, `forceSurge`, `surgeWindowMinutes`, `surgeMax`, `quoteTtlSeconds`, `supplyRadiusKm`
+
+Verified: `http/pricing.http` passes twice (16 requests). A scenario script sent 7 `TripRequested` events through Kafka (one duplicate): demand rose by exactly 6, and with 2 drivers nearby the surge was 3.0 (capped). With driver-service stopped a quote answered 201 in 8 ms with surge 1.0. A 10 s quote answered 404 after 11 s. `geohashEncode(57.64911, 10.40744, 11)` gives the reference value `u4pruydqqvj`.

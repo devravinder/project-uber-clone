@@ -63,3 +63,31 @@ Every arrow is one Lua script, so the status, the heartbeat and both GEO sets ch
 | `GET /admin/stats`                           | lab               | Online, available, location writes per second   |
 
 driver-service also consumes `ub.trip-events` (group `driver-service`): `TripCompleted`, `TripCancelled` and `TripNoDrivers` release the driver of that trip.
+
+## pricing-service
+
+```mermaid
+sequenceDiagram
+  participant R as rider-service
+  participant P as pricing-service
+  participant D as driver-service
+  participant K as ub.trip-events
+  R->>P: POST /quotes (pickup, dropoff)
+  P->>P: distance, duration, cell = geohash5(pickup)
+  P->>P: demand = sum of the last 5 minute counters of the cell
+  P->>D: GET /drivers/nearby (800 ms budget)
+  D-->>P: available drivers within 3 km
+  P->>P: surge from demand and supply, fare
+  P-->>R: quote, saved for 120 s
+  K-->>P: TripRequested
+  P->>P: count it once per event id in the pickup cell
+```
+
+| Key                          | Holds                                        |
+| ---------------------------- | -------------------------------------------- |
+| `prc:quote:<id>`             | Quote JSON, TTL 120 s (the price lock)       |
+| `prc:demand:<cell>:<minute>` | Requests in that cell and minute, TTL 61 min |
+| `prc:cells`                  | Sorted set: cell by last request time        |
+| `prc:seen:<eventId>`         | Dedupe marker for consumed events, TTL 24 h  |
+
+Fare in minor units: `max(8000, 5000 + 1200 x km + 200 x min) x surge`, rounded to whole currency units. Surge = `1 + (demand / supply - 1) x 0.5`, from 1.0 to 3.0; supply unknown means 1.0.

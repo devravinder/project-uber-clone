@@ -1,0 +1,154 @@
+@pricing = http://localhost:7205
+
+### Reset switches (a lab run may have changed them)
+PUT {{pricing}}/admin/switches/reset
+
+?? status == 200
+?? body surgeEnabled == true
+?? body forceSurge == 0
+
+### Quote a 5.1 km trip: 5000 + 1200 x 5.1 + 200 x 12.8 = 13680, rounded to 13700
+# @name quote
+POST {{pricing}}/quotes
+Content-Type: application/json
+X-User: asha
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 13.01, "lng": 77.62 }
+}
+
+?? status == 201
+?? body riderId == asha
+?? body distanceKm == 5.1
+?? body durationMin == 12.8
+?? body fareMinor == 13700
+?? body currency == INR
+?? body cell == tdr1v
+
+### Read the quote back (trip-service does this before creating a trip)
+GET {{pricing}}/quotes/{{quote.id}}
+
+?? status == 200
+?? body fareMinor == {{quote.fareMinor}}
+
+### An unknown or expired quote is 404 QUOTE_NOT_FOUND
+GET {{pricing}}/quotes/qdoesnotexist
+
+?? status == 404
+?? body code == QUOTE_NOT_FOUND
+
+### A short trip pays the minimum fare (8000)
+POST {{pricing}}/quotes
+Content-Type: application/json
+X-User: asha
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 12.976, "lng": 77.5946 }
+}
+
+?? status == 201
+?? body fareMinor == 8000
+
+### Pickup and dropoff closer than 0.3 km is 400
+POST {{pricing}}/quotes
+Content-Type: application/json
+X-User: asha
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 12.9717, "lng": 77.5947 }
+}
+
+?? status == 400
+?? body code == INVALID_REQUEST
+
+### A dropoff outside the demo city is 400
+POST {{pricing}}/quotes
+Content-Type: application/json
+X-User: asha
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 13.5, "lng": 77.6 }
+}
+
+?? status == 400
+?? body code == INVALID_REQUEST
+
+### A quote needs a rider: 400 USER_REQUIRED
+POST {{pricing}}/quotes
+Content-Type: application/json
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 13.01, "lng": 77.62 }
+}
+
+?? status == 400
+?? body code == USER_REQUIRED
+
+### Force surge x2 (lab switch)
+PUT {{pricing}}/admin/switches
+Content-Type: application/json
+
+{ "forceSurge": 2 }
+
+?? status == 200
+?? body forceSurge == 2
+
+### The same trip now costs twice as much
+POST {{pricing}}/quotes
+Content-Type: application/json
+X-User: asha
+
+{
+  "pickup": { "lat": 12.9716, "lng": 77.5946 },
+  "dropoff": { "lat": 13.01, "lng": 77.62 }
+}
+
+?? status == 201
+?? body surge == 2
+?? body fareMinor == 27400
+
+### Switches are typed: a string for a number is 400
+PUT {{pricing}}/admin/switches
+Content-Type: application/json
+
+{ "forceSurge": "high" }
+
+?? status == 400
+?? body code == INVALID_SWITCH
+
+### Reset switches again
+PUT {{pricing}}/admin/switches/reset
+
+?? status == 200
+?? body forceSurge == 0
+
+### Surge at a point: cell, demand, supply and multiplier
+GET {{pricing}}/surge?lat=12.9716&lng=77.5946
+
+?? status == 200
+?? body cell == tdr1v
+?? body surge >= 1
+?? js typeof response.parsedBody.demand === "number"
+
+### A point outside the city is 400
+GET {{pricing}}/surge?lat=20&lng=77.5946
+
+?? status == 400
+?? body code == INVALID_REQUEST
+
+### Cells with recent demand, busiest first
+GET {{pricing}}/surge/cells
+
+?? status == 200
+?? body items isArray
+
+### Counters
+GET {{pricing}}/admin/stats
+
+?? status == 200
+?? body quotes >= 1

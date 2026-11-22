@@ -53,3 +53,24 @@
 - Decision: drivers send `PUT /drivers/:id/location`. The same Lua script publishes the point on `ub:loc:<driverId>`, which location-gateway forwards to the rider.
 - Rejected: a Kafka topic for locations. Kafka keeps every record on disk and consumers would replay stale points; a location is useful for a few seconds and the next one replaces it.
 - Consequences: a location published while no gateway is subscribed is lost, and that is fine.
+
+## ADR-009: Surge per geohash cell, demand over supply
+
+- Decision: demand is the number of `TripRequested` events in the pickup's geohash cell (precision 5, about 4.9 x 4.9 km) over the last `surgeWindowMinutes` (5). Supply is the number of available drivers within `supplyRadiusKm` (3) of the pickup, asked from driver-service. Surge = 1 + (demand / supply - 1) x 0.5, rounded to 0.1, from 1.0 up to `surgeMax` (3.0).
+- Demand is kept in one counter per cell per minute (`prc:demand:<cell>:<minute>`), so the window is a sum of N counters and old minutes expire on their own.
+- Rejected:
+  - Hexagon grids (H3): better neighbours, but a library to vendor and nothing new to learn here.
+  - Counting quotes as demand: a rider refreshing the estimate would raise their own price.
+- Consequences: a cell edge splits a hotspot in two. Production systems smooth across neighbour cells; this project does not.
+
+## ADR-010: Quotes are stored and locked for two minutes
+
+- Decision: a quote is saved in Redis (`prc:quote:<id>`, TTL `quoteTtlSeconds`, 120). trip-service reads the quote by id and charges its fare, so the rider pays the price they saw even if surge moves before they confirm.
+- Rejected: trip-service recomputing the fare at request time. The rider would see one price and pay another.
+- Consequences: a quote id can be used for only one trip (`trips.quote_id` is unique), which also makes "request ride" idempotent (see trip-service in Task 4).
+
+## ADR-011: Pricing degrades to no surge when supply is unknown
+
+- Decision: the supply call has an 800 ms budget. On a timeout, error or 5xx the quote still answers 201 with `supply: null` and surge 1.0, and `supplyFallbacks` counts it.
+- Rejected: failing the quote (riders cannot book while driver-service is down) or caching the last supply forever (stale prices after an outage).
+- Verified: with driver-service stopped a quote answers 201 in 8 ms with surge 1.0.

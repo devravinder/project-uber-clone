@@ -1,0 +1,212 @@
+@matching = http://localhost:7203
+@matching2 = http://localhost:7213
+@driver = http://localhost:7202
+@rider = http://localhost:7201
+@trip = http://localhost:7204
+
+### Reset switches on both matcher instances
+PUT {{matching}}/admin/switches/reset
+
+?? status == 200
+?? body offerTimeoutMs == 10000
+?? body paused == false
+
+###
+PUT {{matching2}}/admin/switches/reset
+
+?? status == 200
+
+### Seed driver hm001 and rider hq001 (idempotent)
+POST {{driver}}/admin/seed
+Content-Type: application/json
+
+{ "count": 1, "prefix": "hm" }
+
+?? status == 200
+
+###
+POST {{rider}}/admin/seed
+Content-Type: application/json
+
+{ "count": 1, "prefix": "hq" }
+
+?? status == 200
+
+### hm001 goes online in the south-west corner, far from other test drivers
+PUT {{driver}}/drivers/hm001/online
+Content-Type: application/json
+X-User: hm001
+
+{ "lat": 12.88, "lng": 77.505 }
+
+?? status == 200
+?? body status == available
+
+### The rider asks for a ride from a point 0.3 km away
+# @name quote
+POST {{rider}}/rides/estimate
+Content-Type: application/json
+X-User: hq001
+
+{
+  "pickup": { "lat": 12.8827, "lng": 77.505 },
+  "dropoff": { "lat": 12.92, "lng": 77.53 }
+}
+
+?? status == 200
+
+###
+# @name ride
+POST {{rider}}/rides
+Content-Type: application/json
+X-User: hq001
+
+{ "quoteId": "{{quote.id}}" }
+
+?? status == 201
+?? body status == requested
+
+### The nearest driver gets the offer (TripRequested went through the outbox and Kafka)
+# @sleep 2000
+GET {{matching}}/offers/current
+X-User: hm001
+
+?? status == 200
+?? body offer.tripId == {{ride.id}}
+?? body offer.attempt == 1
+?? js response.parsedBody.offer !== null && response.parsedBody.offer.distanceToPickupKm < 0.5
+
+### A driver without the offer cannot decline it: 409 OFFER_NOT_FOUND
+POST {{matching}}/offers/{{ride.id}}/decline
+X-User: hm999
+
+?? status == 409
+?? body code == OFFER_NOT_FOUND
+
+### Offers need a caller: 400 USER_REQUIRED
+GET {{matching}}/offers/current
+
+?? status == 400
+?? body code == USER_REQUIRED
+
+### The open job is visible to the lab
+GET {{matching}}/admin/jobs
+
+?? status == 200
+?? js response.parsedBody.items.some((i) => i.job && i.job.tripId === ride.id && i.job.offerDriver === "hm001")
+
+### Accept: the trip is matched with hm001 (either instance can answer)
+POST {{matching2}}/offers/{{ride.id}}/accept
+X-User: hm001
+
+?? status == 200
+?? body status == matched
+?? body driverId == hm001
+
+### Accepting again finds no open offer: 409
+POST {{matching}}/offers/{{ride.id}}/accept
+X-User: hm001
+
+?? status == 409
+?? body code == OFFER_NOT_FOUND
+
+### hm001 is on the trip
+GET {{driver}}/drivers/hm001
+
+?? status == 200
+?? body state.status == on_trip
+?? body state.tripId == {{ride.id}}
+
+### Drive it to the end, so the next run starts clean
+POST {{trip}}/trips/{{ride.id}}/arrive
+X-User: hm001
+
+?? status == 200
+
+###
+POST {{trip}}/trips/{{ride.id}}/start
+X-User: hm001
+
+?? status == 200
+
+###
+POST {{trip}}/trips/{{ride.id}}/complete
+X-User: hm001
+
+?? status == 200
+?? body status == completed
+
+### TripCompleted frees the driver
+# @sleep 1500
+GET {{driver}}/drivers/hm001
+
+?? status == 200
+?? body state.status == available
+
+### Second ride: the rider cancels while the offer is open
+# @name quote2
+POST {{rider}}/rides/estimate
+Content-Type: application/json
+X-User: hq001
+
+{
+  "pickup": { "lat": 12.8827, "lng": 77.505 },
+  "dropoff": { "lat": 12.92, "lng": 77.53 }
+}
+
+?? status == 200
+
+###
+# @name ride2
+POST {{rider}}/rides
+Content-Type: application/json
+X-User: hq001
+
+{ "quoteId": "{{quote2.id}}" }
+
+?? status == 201
+
+###
+# @sleep 2000
+GET {{matching}}/offers/current
+X-User: hm001
+
+?? status == 200
+?? body offer.tripId == {{ride2.id}}
+
+###
+POST {{rider}}/rides/{{ride2.id}}/cancel
+Content-Type: application/json
+X-User: hq001
+
+{ "reason": "found another way" }
+
+?? status == 200
+?? body status == cancelled
+
+### The offer is withdrawn and the driver is free again
+# @sleep 1500
+GET {{matching}}/offers/current
+X-User: hm001
+
+?? status == 200
+?? body offer == null
+
+###
+GET {{driver}}/drivers/hm001
+
+?? status == 200
+?? body state.status == available
+
+### hm001 goes offline
+PUT {{driver}}/drivers/hm001/offline
+X-User: hm001
+
+?? status == 200
+?? body status == offline
+
+### Counters of this instance
+GET {{matching}}/admin/stats
+
+?? status == 200
+?? js typeof response.parsedBody.offers === "number"

@@ -69,6 +69,14 @@ connection, because a subscribed connection can run no other command.
 (2 s default). It throws `UpstreamError` with the upstream `status` and `code`; `status` is null when nothing
 answered. `isUnreachable(error)` is true for no answer or a 5xx.
 
+## Learned in this project
+
+- node-redis 6 speaks RESP3 by default: `HGETALL` answers an object, `ZRANGE ... WITHSCORES` answers `[member, score]`
+  pairs, and scores are numbers. Write readers that accept both shapes (see `toRecord` and `toPairs` in
+  matching-service's `job.store.ts`).
+- PowerShell variable names ignore case: `$ms` (a duration) overwrites `$MS` (a URL). Use distinct names in scripts.
+- `tsx watch` restarts the whole process on a file change, so a Kafka consumer rejoins its group (about 30 s).
+
 ## Known gotchas (from project-twitter-clone)
 
 - Different status per branch (201 vs 200) needs `@Res({ passthrough: true })`.

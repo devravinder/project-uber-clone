@@ -138,3 +138,45 @@ sequenceDiagram
 | `trips_one_active_per_rider`  | A rider has at most one requested or ongoing trip  |
 | `trips_one_active_per_driver` | A driver is on at most one matched or ongoing trip |
 | `outbox_pending_idx`          | The relay scans only unsent rows                   |
+
+## matching-service
+
+```mermaid
+sequenceDiagram
+  participant K as ub.trip-events
+  participant M as matching-service
+  participant D as driver-service
+  participant G as location-gateway
+  participant A as driver app
+  participant T as trip-service
+  K-->>M: TripRequested
+  M->>M: job in mt:job, due now in mt:due
+  M->>D: GET /drivers/nearby (2 km)
+  M->>D: reserve nearest (offered, held 12 s)
+  M->>G: PUBLISH ub:driver:id (offer, 10 s)
+  G-->>A: offer
+  alt driver accepts
+    A->>M: POST /offers/:trip/accept
+    M->>D: assign (on_trip)
+    M->>T: assign driver (matched)
+    T-->>K: TripMatched
+  else declines or 10 s pass
+    M->>T: GET /trips/:id (still requested?)
+    M->>D: release
+    M->>M: next driver, wider radius, or no-drivers after 60 s
+  end
+```
+
+| Key                   | Holds                                                  |
+| --------------------- | ------------------------------------------------------ |
+| `mt:job:<tripId>`     | Pickup, dropoff, fare, radius, declined drivers, offer |
+| `mt:due`              | Trip ids by the next time their job needs a step       |
+| `mt:offer:<driverId>` | The trip a driver is offered, for the polling fallback |
+| `mt:lock:<tripId>`    | Lock token so one instance handles a trip at a time    |
+
+| Endpoint                          | Caller | Does                                        |
+| --------------------------------- | ------ | ------------------------------------------- |
+| `GET /offers/current`             | driver | The open offer for the caller, or null      |
+| `POST /offers/:tripId/accept`     | driver | Matched; 409 if expired, gone or not theirs |
+| `POST /offers/:tripId/decline`    | driver | Next driver right away                      |
+| `GET /admin/jobs`, `/admin/stats` | lab    | Open jobs with due times; counters          |

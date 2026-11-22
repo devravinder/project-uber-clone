@@ -8,7 +8,7 @@ One commit per task, made once its checks pass. `[x]` done and verified, `[~]` p
 | 2   | driver-service: locations in Redis GEO, nearby search, reservations     | done    |
 | 3   | pricing-service: quotes and surge per geohash cell                      | done    |
 | 4   | trip-service and rider-service: trip state machine, outbox, ride API    | done    |
-| 5   | matching-service: offers with timeouts, no double assignment            | planned |
+| 5   | matching-service: offers with timeouts, no double assignment            | done    |
 | 6   | location-gateway: live location and trip updates over WebSocket         | planned |
 | 7   | Web app: rider, driver and lab screens on a city map                    | planned |
 | 8   | Simulator, load scripts, failure scenarios, architecture docs           | planned |
@@ -61,3 +61,18 @@ Verified: `http/pricing.http` passes twice (16 requests). A scenario script sent
 Verified: `http/trip.http` (39) and `http/rider.http` (16) pass, and all five request files pass twice in a row (109 requests). A scenario script checked the rest (36 checks): `TripCompleted` and `TripCancelled` reach driver-service through the outbox and Kafka and free the driver; 10 parallel assigns of one trip give exactly one 200; 10 parallel requests with one quote give one trip; a paused relay keeps rows pending and drains in about 250 ms when resumed; with a 3 s timeout the reaper ends an unmatched trip; with trip-service stopped "request ride" answers 503 `TRIPS_UNAVAILABLE` after one retry, and the same quote works once it is back. With `transitionDelayMs = 300` a 10-way race showed 8 version conflicts and one write.
 
 Gotcha: right after driver-service restarts, its consumer group needs about 30 s to rejoin, so the first trip-end event can take that long to free a driver.
+
+## Task 5: matching-service
+
+- [x] A job per `TripRequested` in Redis (`mt:job:<tripId>`), timers in the `mt:due` sorted set, polled every 250 ms by every instance
+- [x] One offer at a time to the nearest free driver: reserve in driver-service, publish on `ub:driver:<id>`, `GET /offers/current` as a polling fallback
+- [x] Offer timeout, decline, a growing radius (2, 4, 6 km), give up after `matchTimeoutMs` with `no-drivers`
+- [x] Accept: driver-service assign, then trip-service assign; 409 `TRIP_GONE` when the trip was cancelled meanwhile; 503 keeps the offer
+- [x] Per-trip lock with a token; two instances (7203, 7213) share the work
+- [x] `TripCancelled`, `TripNoDrivers` and `TripMatched` close the job; stale `TripRequested` replays are ignored
+- [x] Expired offers check trip-service before re-offering
+- [x] `GET /admin/jobs`, `GET /admin/stats`, switches for every timing and `paused`
+
+Verified: `http/matching.http` passes twice (26 requests). A scenario script with both instances passed 27 checks: the nearest driver gets the first offer about 250 ms after the request; decline moves to the next driver in about 250 ms; an ignored 3 s offer expires and the radius grows to reach a driver 4.4 km away; a cancel during an offer frees the driver in about 260 ms; an unaccepted trip ends as `no_drivers`; 10 concurrent trips with 10 drivers are all matched in about 1.3 s with no driver used twice and offers from both instances; paused matchers leave the job in `mt:due`; with both matchers stopped the sweeper frees the held driver and a restarted matcher continues the job.
+
+Fixed on the way: node-redis 6 answers `HGETALL` and `ZRANGE ... WITHSCORES` in RESP3 shapes; the job store reads both.

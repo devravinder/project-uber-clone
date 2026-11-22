@@ -110,3 +110,40 @@
 
 - Decision: a driver may cancel a matched or arrived trip; it becomes `cancelled` with `cancelledBy: driver`, and the rider requests again.
 - Rejected: putting the trip back to `requested` for re-matching. Real apps do this, but it needs a "matched → requested" edge and a second matching job per trip; the learning value is in matching itself (Task 5).
+
+## ADR-018: Matching jobs and timers live in Redis
+
+- Context: matching is a series of timers (offer expires after 10 s, give up after 60 s, retry search after 2 s). Timers in process memory die with the process.
+- Decision: one hash per open trip (`mt:job:<tripId>`) and one sorted set `mt:due` (trip id scored by the next time it needs attention). Every instance polls `ZRANGEBYSCORE mt:due -inf now` every 250 ms. Each step writes the next due time before it returns.
+- Rejected:
+  - `setTimeout` per offer: lost on restart, and a second instance would not know about it.
+  - Holding the Kafka handler for the whole match: one slow trip would block its partition for a minute.
+  - A Kafka delay topic: needs one topic per delay and still a poller.
+- Verified: with both matchers stopped during an open offer, a restarted matcher continued the job from Redis and offered the next driver.
+
+## ADR-019: One lock per trip, with a token
+
+- Decision: every step on a job (tick, accept, decline, close by event) runs under `SET mt:lock:<tripId> <token> NX PX 5000` and releases with a Lua compare-and-delete. The ticker skips a locked trip; accept and decline wait up to 2 s, then answer 409 `TRIP_BUSY`.
+- Rejected: a lock per instance (one big lock) or none, because accept and the ticker's expiry can hit the same trip in the same millisecond.
+- Consequences: with two matcher instances, both poll the same `mt:due`, but a trip is handled by one at a time. Verified: 10 concurrent trips on 2 instances (7 + 3 offers), all matched, no driver used twice.
+
+## ADR-020: Reserve the driver before offering
+
+- Decision: the matcher calls driver-service `reserve` (available → offered, held for the offer time plus 2 s) before it publishes the offer. Only one trip can hold a driver, so two matchers can never offer the same driver at once, and the driver drops out of `GEOSEARCH` for other trips.
+- Rejected: offering first and checking on accept. Two riders would see "driver found" and one would be told "sorry" seconds later.
+- Consequences: a matcher that dies leaves a driver held; driver-service's sweeper frees holds past `offerUntil` (ADR-006). Verified: 43–66 ms after the hold ended.
+
+## ADR-021: Check the source of truth before acting on a timeout
+
+- Decision: when an offer expires, the matcher reads the trip from trip-service first. If the trip is no longer `requested` (cancelled, matched elsewhere, reaped) it drops the job instead of releasing and re-offering.
+- Rejected: trusting only the events. A lost or late `TripCancelled` would otherwise send a new offer for a cancelled trip.
+
+## ADR-022: Accept is idempotent and keeps the offer when a service does not answer
+
+- Decision: accept runs driver-service `assign`, then trip-service `assign`. A 409 from trip-service (the rider cancelled meanwhile) releases the driver and answers 409 `TRIP_GONE`. No answer at all keeps the offer and answers 503; the driver can press accept again, because both assigns repeat safely for the same trip.
+- Rejected: releasing the driver on any error. If trip-service had committed but the answer was lost, the trip would be matched to a driver the matcher just freed.
+
+## ADR-023: Ignore stale `TripRequested` replays
+
+- Decision: a `TripRequested` older than `matchTimeoutMs` creates no job. A new consumer group starts at the earliest offset, so without this a restart with a fresh group would try to match every trip ever requested.
+- Rejected: starting matching's group at `latest`. A trip requested while the matcher was down would then never be matched.
